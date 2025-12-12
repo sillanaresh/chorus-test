@@ -59,6 +59,9 @@ monitor = { git = "https://github.com/ahkohd/tauri-toolkit", branch = "v2" }
 name = "generate_schema"
 path = "src/bin/generate_schema.rs"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(feature, values(\"cargo-clippy\"))"] }
+
 [dependencies.rusqlite]
 version = "0.32"
 features = ["bundled"]
