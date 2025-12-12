@@ -23,6 +23,7 @@
         "validate": "./script/validate.sh",
         "validate:fix": "./script/validate.sh --fix",
         "delete-db": "./script/delete-db.sh",
+        "release": "./script/release.sh",
         "prepare": "husky"
     },
     "engines": {
