@@ -37,9 +37,7 @@ export type Chat = {
     replyToId: string | null;
     gcPrototype: boolean;
 
-    pinned: boolean; // deprecated
-
-    // Cost tracking
+    pinned: boolean;
     totalCostUsd?: number;
 };
 
@@ -103,7 +101,7 @@ export async function fetchChats(): Promise<Chat[]> {
             project_context_summary, project_context_summary_is_stale, reply_to_id, gc_prototype_chat, total_cost_usd
             FROM chats
             WHERE reply_to_id IS NULL
-            ORDER BY updated_at DESC`,
+            ORDER BY pinned DESC, updated_at DESC`,
         )
         .then((rows) => rows.map(readChat));
 }
@@ -141,9 +139,13 @@ export function useCacheUpdateChat() {
                     updateFn(chat);
                     // NOTE: We don't always need to sort, if this becomes expensive we could gate
                     // this behind a flag
-                    draft.sort((a, b) =>
-                        b.updatedAt.localeCompare(a.updatedAt),
-                    );
+                    draft.sort((a, b) => {
+                        // Sort pinned chats first, then by updatedAt
+                        if (a.pinned !== b.pinned) {
+                            return b.pinned ? 1 : -1;
+                        }
+                        return b.updatedAt.localeCompare(a.updatedAt);
+                    });
                 }
             }),
         );
@@ -393,6 +395,28 @@ export function useRenameChat() {
             await queryClient.invalidateQueries(
                 chatQueries.detail(variables.chatId),
             );
+        },
+    });
+}
+
+export function useTogglePinChat() {
+    const queryClient = useQueryClient();
+    const cacheUpdateChat = useCacheUpdateChat();
+
+    return useMutation({
+        mutationKey: ["togglePinChat"] as const,
+        mutationFn: async ({ chatId, pinned }: { chatId: string; pinned: boolean }) => {
+            await db.execute("UPDATE chats SET pinned = $1 WHERE id = $2", [
+                pinned ? 1 : 0,
+                chatId,
+            ]);
+            return { chatId, pinned };
+        },
+        onSuccess: async (_data, variables) => {
+            cacheUpdateChat(variables.chatId, (chat) => {
+                chat.pinned = variables.pinned;
+            });
+            await queryClient.invalidateQueries(chatQueries.list());
         },
     });
 }
