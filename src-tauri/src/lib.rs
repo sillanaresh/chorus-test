@@ -1,9 +1,16 @@
+#[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
+#[cfg(target_os = "macos")]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Emitter, Listener, Manager};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use tauri::Emitter;
+#[cfg(target_os = "macos")]
+use tauri::{Listener, Manager};
 #[cfg(target_os = "macos")]
 use tauri_nspanel::ManagerExt;
+#[cfg(target_os = "macos")]
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
+#[cfg(target_os = "macos")]
 use tauri_plugin_store::StoreExt;
 
 #[cfg(target_os = "macos")]
@@ -11,12 +18,14 @@ use window::WebviewWindowExt;
 
 mod command;
 pub mod migrations;
+#[cfg(target_os = "macos")]
 mod window;
 
 const DB_URL: &str = "sqlite:chats.db";
 
 pub const SPOTLIGHT_LABEL: &str = "quick-chat";
 
+#[cfg(target_os = "macos")]
 fn char_to_code(ch: char) -> Option<Code> {
     match ch {
         'A' => Some(Code::KeyA),
@@ -49,6 +58,7 @@ fn char_to_code(ch: char) -> Option<Code> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn parse_shortcut(shortcut_str: &str) -> Option<Shortcut> {
     println!("Attempting to parse shortcut: {}", shortcut_str);
     let parts: Vec<&str> = shortcut_str.split('+').map(str::trim).collect();
@@ -131,20 +141,29 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_stronghold::Builder::new(|_pass| todo!()).build())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations(DB_URL, migrations)
                 .build(),
         )
         .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_macos_permissions::init());
+        .plugin(tauri_plugin_dialog::init());
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        builder = builder
+            .plugin(tauri_plugin_stronghold::Builder::new(|_pass| todo!()).build())
+            .plugin(tauri_plugin_process::init())
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_shell::init());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.plugin(tauri_plugin_macos_permissions::init());
+    }
 
     #[cfg(debug_assertions)]
     {
@@ -400,9 +419,11 @@ pub fn run() {
         Ok(())
     };
 
-    builder
-        .setup(setup_fn)
-        .on_menu_event(|app, event| {
+    builder = builder.setup(setup_fn);
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        builder = builder.on_menu_event(|app, event| {
             // Broadcast menu events to all windows
             // Each window will check if it's focused before processing
             match event.id().as_ref() {
@@ -423,8 +444,12 @@ pub fn run() {
                 }
                 _ => {}
             }
-        })
-        .on_window_event(|window, event| match event {
+        });
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        builder = builder.on_window_event(|window, event| match event {
             &tauri::WindowEvent::CloseRequested { ref api, .. } => {
                 // #[cfg(not(target_os = "macos"))] {
                 //   event.window().hide().unwrap();
@@ -434,10 +459,14 @@ pub fn run() {
                 {
                     tauri::AppHandle::hide(&window.app_handle()).unwrap();
                 }
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 api.prevent_close();
             }
             _ => {}
-        })
+        });
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![
             command::show,
             command::hide,

@@ -3,23 +3,32 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppContext } from "@ui/context/AppContext";
 import * as AppMetadataAPI from "@core/chorus/api/AppMetadataAPI";
 
-export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
-    children,
-}) => {
-    const [isQuickChatWindow, setIsQuickChatWindow] = useState(true);
+export const AppProvider: React.FC<{
+    children: React.ReactNode;
+    forceQuickChatWindow?: boolean;
+    isMobileApp?: boolean;
+}> = ({ children, forceQuickChatWindow, isMobileApp = false }) => {
+    const [isQuickChatWindow, setIsQuickChatWindow] = useState(
+        forceQuickChatWindow ?? false,
+    );
     const [zoomLevel, setZoomLevelState] = useState(100);
 
     const savedZoomLevel = AppMetadataAPI.useZoomLevel();
     const setZoomLevelMutation = AppMetadataAPI.useSetZoomLevel();
 
     useEffect(() => {
+        if (forceQuickChatWindow !== undefined) {
+            setIsQuickChatWindow(forceQuickChatWindow);
+            return;
+        }
+
         const checkWindowType = () => {
             const window = getCurrentWindow();
             console.log("window label:", window.label);
             setIsQuickChatWindow(window.label === "quick-chat");
         };
         void checkWindowType();
-    }, []);
+    }, [forceQuickChatWindow]);
 
     useEffect(() => {
         if (savedZoomLevel !== undefined) {
@@ -65,6 +74,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         <AppContext.Provider
             value={{
                 isQuickChatWindow,
+                isMobileApp,
                 zoomLevel,
                 setZoomLevel,
             }}

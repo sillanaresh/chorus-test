@@ -112,7 +112,69 @@ body {
     overscroll-behavior: none;
     margin: 0;
     padding: 0;
-    background: transparent;
+    background: hsl(var(--background));
+}
+
+html.chorus-mobile-root,
+body.chorus-mobile-root,
+html.chorus-mobile-root #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+body.chorus-mobile-root {
+    position: fixed;
+    inset: 0;
+}
+
+.mobile-app {
+    --mobile-header-height: calc(
+        var(--mobile-safe-area-top, env(safe-area-inset-top)) + 3.5rem
+    );
+    height: 100%;
+    min-height: 100%;
+    background: hsl(var(--background));
+}
+
+.mobile-app-shell {
+    min-height: 0;
+}
+
+.mobile-safe-top {
+    padding-top: var(--mobile-safe-area-top, env(safe-area-inset-top));
+}
+
+.mobile-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    transition: transform 160ms ease-out;
+}
+
+.mobile-chat-scroll {
+    padding-top: calc(var(--mobile-header-height) + 1rem);
+    padding-bottom: calc(
+        104px + var(--mobile-safe-area-bottom, env(safe-area-inset-bottom))
+    );
+    -webkit-overflow-scrolling: touch;
+    transition: transform 160ms ease-out;
+}
+
+html.chorus-mobile-keyboard-open .mobile-header,
+html.chorus-mobile-keyboard-open .mobile-chat-scroll {
+    transform: translateY(
+        var(--mobile-safe-area-top, env(safe-area-inset-top))
+    );
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mobile-header,
+    .mobile-chat-scroll {
+        transition: none;
+    }
 }
 
 @layer utilities {

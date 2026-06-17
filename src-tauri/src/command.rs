@@ -1,18 +1,26 @@
 #[cfg(target_os = "macos")]
 use crate::window::WebviewWindowExt;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
 use screenshots::Screen;
-use tauri::{AppHandle, Emitter, Manager};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use tauri::Manager;
+use tauri::{AppHandle, Emitter};
 #[cfg(target_os = "macos")]
 use tauri_nspanel::ManagerExt;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::SPOTLIGHT_LABEL;
 
 // Target size in bytes (3.5MB) for image resizing
 // This is used as the maximum size for images in the application
 // and should match TARGET_IMAGE_SIZE_BYTES in src/ui/hooks/useAttachments.ts
 // Changing this value will affect the size of all images processed by the application
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 const TARGET_SIZE_BYTES: u64 = 4_500_000;
 
 #[tauri::command]
@@ -23,12 +31,20 @@ pub fn show(app_handle: AppHandle) {
         panel.show();
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(all(
+        not(target_os = "macos"),
+        not(any(target_os = "android", target_os = "ios"))
+    ))]
     {
-        if let Some(window) = app_handle.get_window(SPOTLIGHT_LABEL) {
+        if let Some(window) = app_handle.get_webview_window(SPOTLIGHT_LABEL) {
             let _ = window.show();
             let _ = window.set_focus();
         }
+    }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = app_handle;
     }
 }
 
@@ -42,22 +58,39 @@ pub fn hide(app_handle: AppHandle) {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(all(
+        not(target_os = "macos"),
+        not(any(target_os = "android", target_os = "ios"))
+    ))]
     {
-        if let Some(window) = app_handle.get_window(SPOTLIGHT_LABEL) {
+        if let Some(window) = app_handle.get_webview_window(SPOTLIGHT_LABEL) {
             let _ = window.hide();
         }
+    }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = app_handle;
     }
 }
 
 #[tauri::command]
 pub fn open_in_main_window(app_handle: AppHandle, chat_id: String) {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        window.show().unwrap();
-        window.set_focus().unwrap();
-        app_handle
-            .emit_to("main", "open_quick_chat_in_main_window", chat_id)
-            .unwrap();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        if let Some(window) = app_handle.get_webview_window("main") {
+            window.show().unwrap();
+            window.set_focus().unwrap();
+            app_handle
+                .emit_to("main", "open_quick_chat_in_main_window", chat_id)
+                .unwrap();
+        }
+    }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = app_handle;
+        let _ = chat_id;
     }
 }
 
@@ -304,7 +337,10 @@ pub fn capture_whole_screen(app_handle: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
 pub fn capture_whole_screen(app_handle: AppHandle) -> Result<String, String> {
     use image::{DynamicImage, ImageBuffer, ImageFormat};
     use std::time::Instant;
@@ -458,6 +494,19 @@ pub fn capture_whole_screen(app_handle: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn capture_whole_screen(_app_handle: AppHandle) -> Result<String, String> {
+    Err("Screen capture is not available on mobile".to_string())
+}
+
+#[tauri::command]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn resize_image(_file_path: String, _target_size_bytes: u64) -> Result<String, String> {
+    Err("Image resizing is not available on mobile".to_string())
+}
+
+#[tauri::command]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn resize_image(file_path: String, target_size_bytes: u64) -> Result<String, String> {
     use std::fs;
     use std::path::Path;
@@ -522,7 +571,10 @@ pub fn resize_image(file_path: String, target_size_bytes: u64) -> Result<String,
             }
         }
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(all(
+            not(target_os = "macos"),
+            not(any(target_os = "android", target_os = "ios"))
+        ))]
         {
             use image::{io::Reader as ImageReader, ImageFormat};
             println!("Using compression only with quality: {}", quality);
@@ -640,7 +692,10 @@ pub fn resize_image(file_path: String, target_size_bytes: u64) -> Result<String,
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(all(
+        not(target_os = "macos"),
+        not(any(target_os = "android", target_os = "ios"))
+    ))]
     {
         use image::{imageops::FilterType, io::Reader as ImageReader, ImageFormat};
 
@@ -730,16 +785,20 @@ pub fn get_instance_name() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn write_file_async(path: String, content: Option<Vec<u8>>, source_path: Option<String>) -> Result<(), String> {
+pub async fn write_file_async(
+    path: String,
+    content: Option<Vec<u8>>,
+    source_path: Option<String>,
+) -> Result<(), String> {
     use std::path::Path;
-    
+
     // Use Tauri's async runtime to perform the write operation
     tauri::async_runtime::spawn_blocking(move || {
         // Ensure parent directory exists
         if let Some(parent) = Path::new(&path).parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        
+
         if let Some(src_path) = source_path {
             // Copy file from source path (avoids IPC for large files)
             std::fs::copy(&src_path, &path).map_err(|e| e.to_string())?;
@@ -749,21 +808,21 @@ pub async fn write_file_async(path: String, content: Option<Vec<u8>>, source_pat
         } else {
             return Err("Either content or source_path must be provided".to_string());
         }
-        
+
         Ok::<(), String>(())
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))??;
-    
+
     Ok(())
 }
 
 #[tauri::command]
 pub fn get_file_metadata(path: String) -> Result<serde_json::Value, String> {
     use std::fs;
-    
+
     let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
-    
+
     Ok(serde_json::json!({
         "size": metadata.len(),
         "isFile": metadata.is_file(),

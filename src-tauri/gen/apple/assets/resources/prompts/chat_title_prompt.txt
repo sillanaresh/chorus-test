@@ -1,0 +1,39 @@
+You are tasked with creating a concise and descriptive title (no more than 5-7 words) for a chat conversation. This title should capture the main topic or theme of the conversation.
+
+If there are no messages or you cannot determine a title, return nothing (<title></title>).
+
+Here are the chat messages from the conversation:
+
+<chat_messages>
+{{CHAT_MESSAGES}}
+</chat_messages>
+
+To create an appropriate title, follow these steps:
+
+1. Carefully read through all the messages in the conversation.
+2. Identify the main topic or theme of the discussion. This could be:
+   - A specific subject matter being discussed
+   - A problem being solved
+   - A decision being made
+   - An event being planned
+   - Or any other central focus of the conversation
+
+3. Look for key words or phrases that appear frequently or seem particularly important to the conversation.
+
+4. Consider the overall tone and purpose of the conversation (e.g., casual chat, business discussion, technical support, etc.).
+
+5. Synthesize this information into a brief, catchy title that accurately represents the content of the chat. The title should:
+   - Be no longer than 5-7 words
+   - Be clear and easy to understand
+   - Avoid using personal names unless absolutely necessary
+   - Use active language where appropriate
+
+6. If the conversation covers multiple topics, focus on the most prominent or the one that takes up the most substantial part of the discussion.
+
+7. NEVER give more than 5-7 words.
+
+Once you have formulated a title, provide your response in the following format:
+
+<title>Your generated title here</title>
+
+Remember, a good title should give someone who hasn't read the conversation a clear idea of what it's about at a glance. Write like Hemingway at the Kansas City Star.

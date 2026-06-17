@@ -77,9 +77,11 @@ import * as AppMetadataAPI from "@core/chorus/api/AppMetadataAPI";
 import * as ToolsetsAPI from "@core/chorus/api/ToolsetsAPI";
 import * as ChatAPI from "@core/chorus/api/ChatAPI";
 import * as ProjectAPI from "@core/chorus/api/ProjectAPI";
+import MobileApp from "./components/mobile/MobileApp";
+import { isMobileAppModeSync, useMobileAppMode } from "@ui/lib/platform";
 
 scan({
-    enabled: true,
+    enabled: import.meta.env.DEV && !isMobileAppModeSync(),
     log: true, // logs render info to console (default: false)
     clearLog: false, // clears the console per group of renders (default: false)
 });
@@ -919,6 +921,12 @@ function AppContent() {
     );
 }
 
+function RootContent() {
+    const isMobileApp = useMobileAppMode();
+
+    return isMobileApp ? <MobileApp /> : <AppContent />;
+}
+
 async function getDeviceId(): Promise<string> {
     const db = await Database.load(config.dbUrl);
     const uuid = uuidv4();
@@ -946,6 +954,7 @@ function App() {
     const [_deviceId, setDeviceId] = useState<string | null>(null);
     const [db, setDb] = useState<Database | null>(null);
     const [appLocationDialogOpen, setAppLocationDialogOpen] = useState(false);
+    const isMobileApp = isMobileAppModeSync();
 
     useEffect(() => {
         void getDeviceId().then((id) => {
@@ -955,6 +964,10 @@ function App() {
 
     // Check if app is in Applications folder
     useEffect(() => {
+        if (isMobileApp) {
+            return;
+        }
+
         async function checkAppLocation() {
             try {
                 const appPath = await resourceDir();
@@ -975,7 +988,7 @@ function App() {
         }
 
         void checkAppLocation();
-    }, []);
+    }, [isMobileApp]);
 
     const initDatabase = async () => {
         try {
@@ -1018,10 +1031,15 @@ function App() {
                     <ErrorBoundary>
                         {db ? (
                             <DatabaseProvider db={db}>
-                                <AppProvider>
+                                <AppProvider
+                                    forceQuickChatWindow={
+                                        isMobileApp ? true : undefined
+                                    }
+                                    isMobileApp={isMobileApp}
+                                >
                                     <QueryClientProvider client={queryClient}>
                                         <AppMetadataProvider>
-                                            <AppContent />
+                                            <RootContent />
                                         </AppMetadataProvider>
                                     </QueryClientProvider>
                                 </AppProvider>
@@ -1067,7 +1085,7 @@ function App() {
                     </ErrorBoundary>
                 </ThemeProvider>
             </Router>
-            <ReactQueryDevtools initialIsOpen={false} />
+            {!isMobileApp && <ReactQueryDevtools initialIsOpen={false} />}
         </QueryClientProvider>
     );
 }

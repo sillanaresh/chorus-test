@@ -2494,6 +2494,7 @@ function useStreamToolsMessage() {
     const stopMessageStreaming = useStopMessageStreaming();
     const getToolsets = useGetToolsets();
     const getProjectContext = useGetProjectContextLLMMessage();
+    const { isMobileApp } = useAppContext();
 
     return useMutation({
         mutationKey: ["streamToolsMessage"] as const,
@@ -2572,7 +2573,7 @@ function useStreamToolsMessage() {
                     streamingToken,
                 });
 
-                const toolsets = await getToolsets();
+                const toolsets = isMobileApp ? [] : await getToolsets();
                 const tools = toolsets.flatMap((toolset) => {
                     return toolset.listTools();
                 });

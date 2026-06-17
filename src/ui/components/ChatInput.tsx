@@ -32,10 +32,11 @@ import {
 } from "@ui/hooks/useAttachments";
 import { dialogActions, useDialogStore } from "@core/infra/DialogStore";
 import { ChatSuggestions } from "./ChatSuggestions";
-import { ArrowUp, ChevronDownIcon } from "lucide-react";
+import { ArrowUp, ChevronDownIcon, PaperclipIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { EmptyState } from "./EmptyState";
 import { handleInputPasteWithAttachments } from "@ui/lib/utils";
+import { isMobileOpenRouterModelUsable } from "@ui/lib/mobileModels";
 import { inputActions, useInputStore } from "@core/infra/InputStore";
 import { useSearchParams } from "react-router-dom";
 import * as ModelsAPI from "@core/chorus/api/ModelsAPI";
@@ -90,6 +91,7 @@ export function ChatInput({
 }) {
     const selectedModelConfigsCompare =
         ModelsAPI.useSelectedModelConfigsCompare();
+    const selectedQuickChatModel = ModelsAPI.useSelectedModelConfigQuickChat();
     const modelConfigs = ModelsAPI.useModelConfigs();
     const appMetadata = useWaitForAppMetadata();
     const cautiousEnter = appMetadata["cautious_enter"] === "true";
@@ -117,7 +119,7 @@ export function ChatInput({
         association: { type: "draft", chatId },
     });
 
-    const { isQuickChatWindow } = useAppContext();
+    const { isQuickChatWindow, isMobileApp } = useAppContext();
     const focusedChatInputId = useInputStore((state) => state.focusedInputId);
 
     // Create a unique dialog ID for reply model picker
@@ -186,6 +188,15 @@ export function ChatInput({
             e.preventDefault();
 
             const BLOCK_TYPE = "tools";
+
+            if (
+                isQuickChatWindow &&
+                isMobileApp &&
+                !isMobileOpenRouterModelUsable(selectedQuickChatModel.data)
+            ) {
+                toast.error("Choose an available OpenRouter model first");
+                return;
+            }
 
             // 0. early abort in special cases
             if (
@@ -345,6 +356,15 @@ export function ChatInput({
     const handleSubmit = (e: React.FormEvent) => {
         submit.mutate(e);
     };
+
+    const hasSubmitContent =
+        Boolean(draft?.trim()) ||
+        (attachmentsQuery.data?.filter((a) => !a.isLoading)?.length ?? 0) > 0;
+    const canSubmitMobileQuickChat =
+        !isQuickChatWindow ||
+        !isMobileApp ||
+        isMobileOpenRouterModelUsable(selectedQuickChatModel.data);
+    const canSubmit = hasSubmitContent && canSubmitMobileQuickChat;
 
     const handlePaste = async (
         e: React.ClipboardEvent<HTMLTextAreaElement>,
@@ -573,7 +593,11 @@ export function ChatInput({
                             }
                         } else {
                             // Normal mode: Enter to submit, Shift+Enter for newline
-                            if (e.key === "Enter" && !e.shiftKey) {
+                            if (
+                                e.key === "Enter" &&
+                                !e.shiftKey &&
+                                !isMobileApp
+                            ) {
                                 e.preventDefault();
                                 handleSubmit(e);
                             }
@@ -632,28 +656,17 @@ export function ChatInput({
                             <TooltipTrigger asChild>
                                 <button
                                     className={`flex items-center rounded-full p-1 transition-all duration-300 ease-out ${
-                                        !draft?.trim() &&
-                                        (attachmentsQuery.data?.filter(
-                                            (a) => !a.isLoading,
-                                        )?.length ?? 0) === 0
+                                        !hasSubmitContent
                                             ? "bg-muted text-muted-foreground cursor-not-allowed scale-95 opacity-70"
                                             : "bg-primary text-background hover:scale-110 hover:shadow-lg scale-100 opacity-100 shadow-md hover:shadow-primary/25 active:scale-105"
                                     }`}
                                     onClick={handleSubmit}
                                     type="button"
-                                    disabled={
-                                        !draft?.trim() &&
-                                        (attachmentsQuery.data?.filter(
-                                            (a) => !a.isLoading,
-                                        )?.length ?? 0) === 0
-                                    }
+                                    disabled={!hasSubmitContent}
                                 >
                                     <ArrowUp
                                         className={`size-4 transition-transform duration-300 ${
-                                            !draft?.trim() &&
-                                            (attachmentsQuery.data?.filter(
-                                                (a) => !a.isLoading,
-                                            )?.length ?? 0) === 0
+                                            !hasSubmitContent
                                                 ? "scale-90"
                                                 : "scale-100"
                                         }`}
@@ -747,6 +760,79 @@ export function ChatInput({
         );
     }
 
+    if (isQuickChatWindow && isMobileApp) {
+        return (
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
+                <AttachmentDropArea
+                    attachments={attachmentsQuery.data ?? []}
+                    onFileDrop={fileDrop.mutate}
+                    onRemove={(attachmentId) =>
+                        removeAttachment.mutate({ attachmentId })
+                    }
+                />
+                <form
+                    onSubmit={handleSubmit}
+                    className="flex min-h-12 items-end gap-2"
+                >
+                    <button
+                        type="button"
+                        className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted"
+                        onClick={(event) => {
+                            event.preventDefault();
+                            fileSelect.mutate();
+                        }}
+                        aria-label="Add attachment"
+                    >
+                        <PaperclipIcon className="size-5" strokeWidth={1.8} />
+                    </button>
+                    <AutoExpandingTextarea
+                        ref={inputRef}
+                        value={draft}
+                        onChange={(e) => {
+                            setDraft(e.target.value);
+                        }}
+                        onPaste={(e) => void handlePaste(e)}
+                        rows={1}
+                        onKeyDown={(e) => {
+                            if (
+                                cautiousEnter &&
+                                e.key === "Enter" &&
+                                (e.metaKey || e.ctrlKey)
+                            ) {
+                                e.preventDefault();
+                                handleSubmit(e);
+                            }
+                        }}
+                        placeholder={placeholderText}
+                        className="max-h-[32dvh] min-h-11 flex-1 rounded-xl border bg-foreground/5 px-3 py-2.5 text-[16px] leading-6 placeholder:text-foreground/45 focus:outline-none focus:ring-0"
+                        autoFocus={false}
+                        onFocus={() =>
+                            inputActions.setFocusedInputId(
+                                isReply
+                                    ? REPLY_CHAT_INPUT_ID
+                                    : DEFAULT_CHAT_INPUT_ID,
+                            )
+                        }
+                        onBlur={() => inputActions.setFocusedInputId(null)}
+                    />
+                    <button
+                        className={`mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full transition-all ${
+                            canSubmit
+                                ? "bg-primary text-background shadow-sm active:scale-95"
+                                : "bg-muted text-muted-foreground opacity-70"
+                        }`}
+                        onClick={handleSubmit}
+                        type="button"
+                        disabled={!canSubmit}
+                        aria-label="Send message"
+                    >
+                        <ArrowUp className="size-5" strokeWidth={2.5} />
+                    </button>
+                </form>
+            </div>
+        );
+    }
+
     return isQuickChatWindow ? (
         <div className="absolute bottom-2 left-2 right-2">
             <AttachmentDropArea
@@ -773,7 +859,11 @@ export function ChatInput({
                         }
                     } else {
                         // Normal mode: Enter to submit, Shift+Enter for newline
-                        if (e.key === "Enter" && !e.shiftKey) {
+                        if (
+                            e.key === "Enter" &&
+                            !e.shiftKey &&
+                            !isMobileApp
+                        ) {
                             e.preventDefault();
                             handleSubmit(e);
                         }
@@ -783,7 +873,7 @@ export function ChatInput({
                 className={`ring-0 w-full rounded-xl bg-foreground/5 focus:shadow-sm
                                 placeholder:text-foreground/50 px-3 !border-foreground/10 select-text
                                 max-h-[70vh] overflow-y-auto !p-2`}
-                autoFocus
+                autoFocus={!isMobileApp}
                 onFocus={() =>
                     inputActions.setFocusedInputId(
                         isReply ? REPLY_CHAT_INPUT_ID : DEFAULT_CHAT_INPUT_ID,

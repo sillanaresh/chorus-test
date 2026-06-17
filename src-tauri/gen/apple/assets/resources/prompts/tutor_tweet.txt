@@ -1,0 +1,33 @@
+You are the greatest instructional designer in history. Create and output a spaced repetition learning curriculum for <topic> using the principles described below:
+
+There are plenty of learning-enhancing practice strategies that have been tested scientifically, numerous times, and are completely replicable. They might as well be laws of physics.
+
+For instance: we know that actively solving problems produces more learning than passively watching a video/lecture or re-reading notes.
+
+(To be clear: active learning doesn’t mean that students never watch and listen. It just means that students are actively solving problems as soon as possible following a minimum effective dose of initial explanation, and they spend the vast majority of their time actively solving problems.)
+
+Another finding: if you don’t review information, you forget it. You can actually model this precisely, mathematically, using a forgetting curve. I’m not exaggerating when I refer to these things as laws of physics – the only real difference is that we’ve gone up several levels of scale and are dealing with noisier stochastic processes (that also have noisier underlying variables).
+
+Okay, but aren’t these findings obvious? Yes, but…
+
+Yes, but in education, obvious strategies often aren't put into practice. For instance, plenty of classes that still run on a pure lecture format and don't review previously learned unless it's the day before a test.
+
+Yes, but there are plenty of other findings that replicate just as well but are not so obvious.
+
+Here are some less obvious findings.
+
+-- The spacing effect: more long-term retention occurs when you space out your practice, even if it's the same amount of total practice. 
+
+-- A profound consequence of the spacing effect is that the more reviews are completed (with appropriate spacing), the longer the memory will be retained, and the longer one can wait until the next review is needed. This observation gives rise to a systematic method for reviewing previously-learned material called spaced repetition (or distributed practice). A "repetition" is a successful review at the appropriate time.
+
+-- To maximize the amount by which your memory is extended when solving review problems, it's necessary to avoid looking back at reference material unless you are totally stuck and cannot remember how to proceed. This is called the testing effect, also known as the retrieval practice effect: the best way to review material is to test yourself on it, that is, practice retrieving it from memory, unassisted.
+
+-- The testing effect can be combined with spaced repetition to produce an even more potent learning technique known as spaced retrieval practice.
+
+-- During review, it's also best to spread minimal effective doses of practice across various skills. This is known as mixed practice or interleaving -- it's the opposite of "blocked" practice, which involves extensive consecutive repetition of a single skill. Blocked practice can give a false sense of mastery and fluency because it allows students to settle into a robotic rhythm of mindlessly applying one type of solution to one type of problem. Mixed practice, on the other hand, creates a "desirable difficulty" that promotes vastly superior retention and generalization, making it a more effective review strategy.
+
+-- To free up mental processing power, it's critical to practice low-level skills enough that they can be carried out without requiring conscious effort. This is known as automaticity. Think of a basketball player who is running, dribbling, and strategizing all at the same time -- if they had to consciously manage every bounce and every stride, they'd be too overwhelmed to look around and strategize. The same is true in learning.
+
+-- The most effective type of active learning is deliberate practice, which consists of individualized training activities specially chosen to improve specific aspects of a student's performance through repetition (effortful repetition, not mindless repetition) and successive refinement. However, because deliberate practice requires intense effort focused in areas beyond one's repertoire, which tends to be more effortful and less enjoyable, people will tend to avoid it, instead opting to ineffectively practice within their level of comfort (which is never a form of deliberate practice, no matter what activities are performed). 
+
+-- Instructional techniques that promote the most learning in experts, promote the least learning in beginners, and vice versa. This is known as the expertise reversal effect. An important consequence is that effective methods of practice for students typically should NOT emulate what experts do in the professional workplace (e.g., working in groups to solve open-ended problems). Beginners (i.e. students) learn most effectively through direct instruction.
