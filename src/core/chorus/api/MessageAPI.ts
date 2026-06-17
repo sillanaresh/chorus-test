@@ -2516,8 +2516,12 @@ function useStreamToolsMessage() {
             ).projectId;
             const projectContext = await getProjectContext(projectId, chatId);
             const appMetadata = isMobileApp ? await fetchAppMetadata() : {};
+            const mobileChatWebSearchValue =
+                appMetadata[`mobile_web_search_enabled:${chatId}`];
             const mobileWebSearchEnabled =
-                appMetadata["mobile_web_search_enabled"] === "true";
+                mobileChatWebSearchValue === undefined
+                    ? appMetadata["mobile_web_search_enabled"] === "true"
+                    : mobileChatWebSearchValue === "true";
 
             // this loop adds all MessageParts
             const MAX_AI_TURNS = 40;

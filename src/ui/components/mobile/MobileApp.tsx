@@ -47,6 +47,25 @@ import * as ToolPermissionsAPI from "@core/chorus/api/ToolPermissionsAPI";
 
 const settingsManager = SettingsManager.getInstance();
 
+const mobileType = {
+    screenTitle: "text-[22px] font-semibold leading-7",
+    headerTitle: "text-[17px] font-medium leading-6",
+    rowTitle: "text-[16px] font-medium leading-6",
+    rowMeta: "text-[13px] leading-5 text-muted-foreground",
+    body: "text-[15px] leading-6",
+    label: "text-sm font-medium",
+} as const;
+
+const mobileIconButton =
+    "flex size-10 items-center justify-center rounded-full active:bg-muted";
+
+const mobileFab =
+    "fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] right-5 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-background shadow-md active:scale-95";
+
+const mobileWebOn = "bg-accent-800 text-accent-25";
+const mobileWebOff =
+    "border border-accent-800/70 text-accent-800 dark:text-accent-25";
+
 function isOpenRouterModel(modelConfig: ModelConfig | undefined | null) {
     if (!modelConfig) return false;
 
@@ -77,15 +96,26 @@ function openRouterModelConfigs(modelConfigs: ModelConfig[] | undefined) {
     );
 }
 
-function useMobileWebSearchToggle() {
-    const enabled = AppMetadataAPI.useMobileWebSearchEnabled();
-    const setMobileWebSearchEnabled =
+function useMobileWebSearchToggle(chatId?: string) {
+    const defaultEnabled = AppMetadataAPI.useMobileWebSearchEnabled();
+    const chatEnabled = AppMetadataAPI.useMobileChatWebSearchEnabled(chatId);
+    const enabled = chatId ? chatEnabled : defaultEnabled;
+    const setMobileWebSearchDefaultEnabled =
         AppMetadataAPI.useSetMobileWebSearchEnabled();
+    const setMobileChatWebSearchEnabled =
+        AppMetadataAPI.useSetMobileChatWebSearchEnabled();
     const upsertToolPermission = ToolPermissionsAPI.useUpsertToolPermission();
 
     const setEnabled = useCallback(
         async (nextEnabled: boolean) => {
-            await setMobileWebSearchEnabled.mutateAsync(nextEnabled);
+            if (chatId) {
+                await setMobileChatWebSearchEnabled.mutateAsync({
+                    chatId,
+                    enabled: nextEnabled,
+                });
+            } else {
+                await setMobileWebSearchDefaultEnabled.mutateAsync(nextEnabled);
+            }
 
             if (nextEnabled) {
                 await Promise.all(
@@ -100,14 +130,20 @@ function useMobileWebSearchToggle() {
                 );
             }
         },
-        [setMobileWebSearchEnabled, upsertToolPermission],
+        [
+            chatId,
+            setMobileChatWebSearchEnabled,
+            setMobileWebSearchDefaultEnabled,
+            upsertToolPermission,
+        ],
     );
 
     return {
         enabled,
         setEnabled,
         isPending:
-            setMobileWebSearchEnabled.isPending ||
+            setMobileWebSearchDefaultEnabled.isPending ||
+            setMobileChatWebSearchEnabled.isPending ||
             upsertToolPermission.isPending,
     };
 }
@@ -279,7 +315,7 @@ function MobileModelSelect({ compact = false }: { compact?: boolean }) {
         >
             {!compact && (
                 <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">Model</label>
+                    <label className={mobileType.label}>Model</label>
                     <button
                         type="button"
                         className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -345,10 +381,10 @@ function MobileModelPickerSheet({
         <div className="fixed inset-0 z-[70] bg-background">
             <div className="flex h-full flex-col mobile-safe-top">
                 <div className="flex h-14 items-center justify-between border-b px-4">
-                    <h2 className="text-base font-medium">Choose model</h2>
+                    <h2 className={mobileType.headerTitle}>Choose model</h2>
                     <button
                         type="button"
-                        className="flex size-10 items-center justify-center rounded-full active:bg-muted"
+                        className={mobileIconButton}
                         onClick={onClose}
                         aria-label="Close model picker"
                     >
@@ -375,7 +411,7 @@ function MobileModelPickerSheet({
                                     )}
                                     size="sm"
                                 />
-                                <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                                <span className={`min-w-0 flex-1 truncate ${mobileType.rowTitle}`}>
                                     {modelConfig.displayName}
                                 </span>
                                 {selected && (
@@ -459,12 +495,12 @@ function MobileSettingsPanel({
             <div className="flex items-center justify-between border-b px-4 py-3">
                 <div className="flex items-center gap-2">
                     <KeyRoundIcon className="size-4 text-muted-foreground" />
-                    <h2 className="text-base font-medium">Settings</h2>
+                    <h2 className={mobileType.headerTitle}>Settings</h2>
                 </div>
                 {showClose && (
                     <button
                         type="button"
-                        className="flex size-9 items-center justify-center rounded-full hover:bg-muted"
+                        className={mobileIconButton}
                         onClick={onClose}
                         aria-label="Close settings"
                     >
@@ -475,7 +511,7 @@ function MobileSettingsPanel({
 
             <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-5">
                 <section className="flex flex-col gap-2">
-                    <div className="text-sm font-medium">Appearance</div>
+                    <div className={mobileType.label}>Appearance</div>
                     <div className="grid grid-cols-3 gap-2">
                         {[
                             {
@@ -516,7 +552,7 @@ function MobileSettingsPanel({
 
                 <section className="flex flex-col gap-2">
                     <label
-                        className="text-sm font-medium"
+                        className={mobileType.label}
                         htmlFor="mobile-openrouter-key"
                     >
                         OpenRouter API key
@@ -550,13 +586,12 @@ function MobileSettingsPanel({
                 {hasOpenRouterKey && (
                     <section className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
                         <div className="min-w-0">
-                            <div className="flex items-center gap-2 text-sm font-medium">
+                            <div className={`flex items-center gap-2 ${mobileType.label}`}>
                                 <GlobeIcon className="size-4 text-muted-foreground" />
-                                Web search
+                                Default web search
                             </div>
                             <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                                Allow the selected model to search and fetch
-                                webpages.
+                                Use web search automatically in new chats.
                             </div>
                         </div>
                         <button
@@ -565,8 +600,8 @@ function MobileSettingsPanel({
                             aria-checked={mobileWebSearch.enabled}
                             className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
                                 mobileWebSearch.enabled
-                                    ? "bg-green-600"
-                                    : "bg-muted"
+                                    ? "bg-accent-800"
+                                    : "border border-accent-800/60 bg-transparent"
                             }`}
                             onClick={() =>
                                 void mobileWebSearch.setEnabled(
@@ -578,8 +613,8 @@ function MobileSettingsPanel({
                             <span
                                 className={`absolute top-1 size-5 rounded-full bg-background transition-transform ${
                                     mobileWebSearch.enabled
-                                        ? "translate-x-6 bg-white"
-                                        : "translate-x-1 bg-background"
+                                        ? "translate-x-6 bg-accent-25"
+                                        : "translate-x-1 bg-accent-800"
                                 }`}
                             />
                         </button>
@@ -603,10 +638,12 @@ function MobileChatListSheet({
     open,
     currentChatId,
     onClose,
+    onOpenSettings,
 }: {
     open: boolean;
     currentChatId?: string;
     onClose: () => void;
+    onOpenSettings: () => void;
 }) {
     const navigate = useNavigate();
     const chatsQuery = useQuery(ChatAPI.chatQueries.list());
@@ -635,34 +672,36 @@ function MobileChatListSheet({
         <div className="fixed inset-0 z-40 bg-background">
             <div className="flex h-full flex-col mobile-safe-top">
                 <div className="flex items-center justify-between border-b px-4 py-3">
-                    <h2 className="text-base font-medium">Chats</h2>
-                    <button
-                        type="button"
-                        className="flex size-9 items-center justify-center rounded-full hover:bg-muted"
-                        onClick={onClose}
-                        aria-label="Close chats"
-                    >
-                        <XIcon className="size-4" />
-                    </button>
+                    <h2 className={mobileType.headerTitle}>Chats</h2>
+                    <div className="flex items-center gap-1">
+                        <button
+                            type="button"
+                            className={mobileIconButton}
+                            onClick={() => {
+                                onClose();
+                                onOpenSettings();
+                            }}
+                            aria-label="Open settings"
+                        >
+                            <SettingsIcon className="size-5" />
+                        </button>
+                        <button
+                            type="button"
+                            className={mobileIconButton}
+                            onClick={onClose}
+                            aria-label="Close chats"
+                        >
+                            <XIcon className="size-5" />
+                        </button>
+                    </div>
                 </div>
 
-                <div className="border-b px-4 py-3">
-                    <button
-                        type="button"
-                        className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary text-sm font-medium text-background"
-                        onClick={() => void createNewChat()}
-                    >
-                        <PlusIcon className="size-4" />
-                        New chat
-                    </button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-2 py-2">
+                <div className="relative flex-1 overflow-y-auto px-3 py-3">
                     {mobileChats.map((chat) => (
                         <button
                             key={chat.id}
                             type="button"
-                            className={`group flex w-full items-center gap-3 rounded-md px-3 py-3 text-left ${
+                            className={`group flex min-h-16 w-full items-center gap-3 rounded-md px-3 text-left ${
                                 chat.id === currentChatId
                                     ? "bg-highlight text-highlight-foreground"
                                     : "hover:bg-muted"
@@ -673,10 +712,10 @@ function MobileChatListSheet({
                             }}
                         >
                             <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-medium">
+                                <div className={`truncate ${mobileType.rowTitle}`}>
                                     {chatTitle(chat)}
                                 </div>
-                                <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                                <div className={`mt-0.5 truncate ${mobileType.rowMeta}`}>
                                     {new Date(
                                         chat.updatedAt,
                                     ).toLocaleDateString()}
@@ -720,6 +759,15 @@ function MobileChatListSheet({
                             No chats yet
                         </div>
                     )}
+
+                    <button
+                        type="button"
+                        className={mobileFab}
+                        onClick={() => void createNewChat()}
+                        aria-label="New chat"
+                    >
+                        <PlusIcon className="size-6" />
+                    </button>
                 </div>
             </div>
         </div>
@@ -729,15 +777,13 @@ function MobileChatListSheet({
 function MobileHeader({
     chat,
     onOpenChats,
-    onOpenSettings,
     onNewChat,
 }: {
     chat?: Chat;
     onOpenChats: () => void;
-    onOpenSettings: () => void;
     onNewChat: () => void;
 }) {
-    const mobileWebSearch = useMobileWebSearchToggle();
+    const mobileWebSearch = useMobileWebSearchToggle(chat?.id);
 
     return (
         <header className="mobile-header mobile-safe-top border-b bg-background/95 backdrop-blur-xl">
@@ -745,14 +791,14 @@ function MobileHeader({
                 <div className="flex h-11 items-center gap-2">
                     <button
                         type="button"
-                        className="flex size-10 items-center justify-center rounded-full active:bg-muted"
+                        className={mobileIconButton}
                         onClick={onOpenChats}
                         aria-label="Open chats"
                     >
                         <MenuIcon className="size-5" />
                     </button>
                     <div className="min-w-0 flex-1">
-                        <div className="truncate text-[17px] font-medium leading-6">
+                        <div className={`truncate ${mobileType.headerTitle}`}>
                             {chatTitle(chat)}
                         </div>
                     </div>
@@ -761,9 +807,7 @@ function MobileHeader({
                         role="switch"
                         aria-checked={mobileWebSearch.enabled}
                         className={`flex size-10 items-center justify-center rounded-full active:bg-muted ${
-                            mobileWebSearch.enabled
-                                ? "bg-green-600 text-white"
-                                : ""
+                            mobileWebSearch.enabled ? mobileWebOn : mobileWebOff
                         }`}
                         onClick={() =>
                             void mobileWebSearch.setEnabled(
@@ -773,27 +817,19 @@ function MobileHeader({
                         disabled={mobileWebSearch.isPending}
                         aria-label={
                             mobileWebSearch.enabled
-                                ? "Disable web search"
-                                : "Enable web search"
+                                ? "Disable web search for this chat"
+                                : "Enable web search for this chat"
                         }
                     >
                         <GlobeIcon className="size-5" />
                     </button>
                     <button
                         type="button"
-                        className="flex size-10 items-center justify-center rounded-full active:bg-muted"
+                        className={mobileIconButton}
                         onClick={onNewChat}
                         aria-label="New chat"
                     >
                         <PlusIcon className="size-5" />
-                    </button>
-                    <button
-                        type="button"
-                        className="flex size-10 items-center justify-center rounded-full active:bg-muted"
-                        onClick={onOpenSettings}
-                        aria-label="Open settings"
-                    >
-                        <SettingsIcon className="size-5" />
                     </button>
                 </div>
                 <div className="pl-12 pr-1">
@@ -907,10 +943,8 @@ function MobileMessageSet({
 
 function MobileChatRoute({
     onOpenChats,
-    onOpenSettings,
 }: {
     onOpenChats: () => void;
-    onOpenSettings: () => void;
 }) {
     const { chatId } = useParams();
     const navigate = useNavigate();
@@ -959,7 +993,6 @@ function MobileChatRoute({
             <div className="flex h-full flex-col bg-background">
                 <MobileHeader
                     onOpenChats={onOpenChats}
-                    onOpenSettings={onOpenSettings}
                     onNewChat={() => void createNewChat()}
                 />
                 <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
@@ -987,7 +1020,6 @@ function MobileChatRoute({
             <MobileHeader
                 chat={chatQuery.data}
                 onOpenChats={onOpenChats}
-                onOpenSettings={onOpenSettings}
                 onNewChat={() => void createNewChat()}
             />
 
@@ -1058,10 +1090,8 @@ function MobileHome() {
         <div className="flex h-full flex-col bg-background mobile-safe-top">
             <header className="flex min-h-16 items-center justify-between border-b px-4">
                 <div>
-                    <h1 className="text-[22px] font-semibold leading-7">
-                        Chats
-                    </h1>
-                    <div className="mt-0.5 text-xs text-muted-foreground">
+                    <h1 className={mobileType.screenTitle}>Chats</h1>
+                    <div className={`mt-0.5 ${mobileType.rowMeta}`}>
                         {mobileChats.length === 1
                             ? "1 conversation"
                             : `${mobileChats.length} conversations`}
@@ -1069,7 +1099,7 @@ function MobileHome() {
                 </div>
                 <button
                     type="button"
-                    className="flex size-10 items-center justify-center rounded-full active:bg-muted"
+                    className={mobileIconButton}
                     onClick={() => navigate("/settings")}
                     aria-label="Open settings"
                 >
@@ -1099,10 +1129,10 @@ function MobileHome() {
                                 onClick={() => navigate(`/chat/${chat.id}`)}
                             >
                                 <div className="min-w-0 flex-1">
-                                    <div className="truncate text-[16px] font-medium leading-6">
+                                    <div className={`truncate ${mobileType.rowTitle}`}>
                                         {chatTitle(chat)}
                                     </div>
-                                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                                    <div className={`mt-0.5 truncate ${mobileType.rowMeta}`}>
                                         {new Date(
                                             chat.updatedAt,
                                         ).toLocaleDateString()}
@@ -1115,7 +1145,7 @@ function MobileHome() {
 
                 <button
                     type="button"
-                    className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] right-5 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-background shadow-md active:scale-95"
+                    className={mobileFab}
                     onClick={() => void createNewChat()}
                     aria-label="New chat"
                 >
@@ -1137,8 +1167,8 @@ export default function MobileApp() {
 
     const { mode } = useTheme();
     const [isChatListOpen, setIsChatListOpen] = useState(false);
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const location = useLocation();
+    const navigate = useNavigate();
     const currentChatId = location.pathname.match(/^\/chat\/([^/]+)$/)?.[1];
 
     const toasterTheme =
@@ -1157,7 +1187,6 @@ export default function MobileApp() {
                     element={
                         <MobileChatRoute
                             onOpenChats={() => setIsChatListOpen(true)}
-                            onOpenSettings={() => setIsSettingsOpen(true)}
                         />
                     }
                 />
@@ -1169,15 +1198,8 @@ export default function MobileApp() {
                 open={isChatListOpen}
                 currentChatId={currentChatId}
                 onClose={() => setIsChatListOpen(false)}
+                onOpenSettings={() => navigate("/settings")}
             />
-
-            {isSettingsOpen && (
-                <div className="fixed inset-0 z-50">
-                    <MobileSettingsPanel
-                        onClose={() => setIsSettingsOpen(false)}
-                    />
-                </div>
-            )}
 
             <Toaster
                 theme={toasterTheme}

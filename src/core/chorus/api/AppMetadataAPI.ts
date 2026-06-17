@@ -179,6 +179,19 @@ export function useMobileWebSearchEnabled() {
     return appMetadata?.["mobile_web_search_enabled"] === "true";
 }
 
+function mobileChatWebSearchKey(chatId: string) {
+    return `mobile_web_search_enabled:${chatId}`;
+}
+
+export function useMobileChatWebSearchEnabled(chatId: string | undefined) {
+    const { data: appMetadata } = useAppMetadata();
+    const defaultEnabled = appMetadata?.["mobile_web_search_enabled"] === "true";
+    if (!chatId) return defaultEnabled;
+
+    const chatValue = appMetadata?.[mobileChatWebSearchKey(chatId)];
+    return chatValue === undefined ? defaultEnabled : chatValue === "true";
+}
+
 export function useSetMobileWebSearchEnabled() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -187,6 +200,30 @@ export function useSetMobileWebSearchEnabled() {
             await db.execute(
                 "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)",
                 ["mobile_web_search_enabled", enabled ? "true" : "false"],
+            );
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: appMetadataKeys.appMetadata(),
+            });
+        },
+    });
+}
+
+export function useSetMobileChatWebSearchEnabled() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationKey: ["setMobileChatWebSearchEnabled"] as const,
+        mutationFn: async ({
+            chatId,
+            enabled,
+        }: {
+            chatId: string;
+            enabled: boolean;
+        }) => {
+            await db.execute(
+                "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)",
+                [mobileChatWebSearchKey(chatId), enabled ? "true" : "false"],
             );
         },
         onSuccess: async () => {
