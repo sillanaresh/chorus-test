@@ -953,14 +953,19 @@ async function getDeviceId(): Promise<string> {
 function App() {
     const [_deviceId, setDeviceId] = useState<string | null>(null);
     const [db, setDb] = useState<Database | null>(null);
+    const [databaseError, setDatabaseError] = useState<string | null>(null);
     const [appLocationDialogOpen, setAppLocationDialogOpen] = useState(false);
     const isMobileApp = isMobileAppModeSync();
 
     useEffect(() => {
+        if (isMobileApp) {
+            return;
+        }
+
         void getDeviceId().then((id) => {
             setDeviceId(id);
         });
-    }, []);
+    }, [isMobileApp]);
 
     // Check if app is in Applications folder
     useEffect(() => {
@@ -994,8 +999,14 @@ function App() {
         try {
             const db = await Database.load(config.dbUrl);
             setDb(db);
+            setDatabaseError(null);
         } catch (error) {
             console.error("Database initialization error:", error);
+            setDatabaseError(
+                error instanceof Error
+                    ? error.message
+                    : "Failed to initialize database",
+            );
             toast.error("Error", {
                 description: "Failed to initialize database",
             });
@@ -1008,6 +1019,10 @@ function App() {
 
     // Clean up streaming messages on app startup and close
     useEffect(() => {
+        if (isMobileApp) {
+            return;
+        }
+
         // Clean up any stale streaming messages on startup
         void stopAllStreamingMessages().catch(console.error);
 
@@ -1021,11 +1036,33 @@ function App() {
         return () => {
             window.removeEventListener("beforeunload", handleBeforeUnload);
         };
-    }, []);
+    }, [isMobileApp]);
+
+    const databaseFallback = isMobileApp ? (
+        <div className="mobile-boot-screen">
+            {databaseError ? (
+                <>
+                    <div className="mobile-boot-title">
+                        Could not open Chorus
+                    </div>
+                    <div className="mobile-boot-copy">{databaseError}</div>
+                </>
+            ) : (
+                <>
+                    <RetroSpinner />
+                    <div className="mobile-boot-copy">Loading Chorus...</div>
+                </>
+            )}
+        </div>
+    ) : (
+        <div className="p-10 text-sm text-muted-foreground">
+            <RetroSpinner />
+            Loading database...
+        </div>
+    );
 
     return (
         <QueryClientProvider client={queryClient}>
-            <script src="https://unpkg.com/react-scan/dist/auto.global.js"></script>
             <Router>
                 <ThemeProvider storageKey="melty-theme">
                     <ErrorBoundary>
@@ -1045,10 +1082,7 @@ function App() {
                                 </AppProvider>
                             </DatabaseProvider>
                         ) : (
-                            <div className="p-10 text-sm text-muted-foreground">
-                                <RetroSpinner />
-                                Loading database...
-                            </div>
+                            databaseFallback
                         )}
                     </ErrorBoundary>
 
