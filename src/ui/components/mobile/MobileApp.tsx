@@ -130,13 +130,10 @@ function useStableMobileViewport() {
                 activeElement instanceof HTMLInputElement ||
                 activeElement instanceof HTMLTextAreaElement ||
                 activeElement?.getAttribute("contenteditable") === "true";
-            const keyboardRaised = window.visualViewport
-                ? window.innerHeight - window.visualViewport.height > 80
-                : false;
 
             html.classList.toggle(
                 "chorus-mobile-keyboard-open",
-                hasTextInputFocused && keyboardRaised,
+                hasTextInputFocused,
             );
         };
         const updateViewportState = () => {
@@ -145,6 +142,12 @@ function useStableMobileViewport() {
         };
 
         updateViewportState();
+        if (
+            document.activeElement instanceof HTMLInputElement ||
+            document.activeElement instanceof HTMLTextAreaElement
+        ) {
+            document.activeElement.blur();
+        }
         window.addEventListener("orientationchange", updateViewportState);
         window.visualViewport?.addEventListener("resize", updateViewportState);
         document.addEventListener("focusin", updateKeyboardState);
