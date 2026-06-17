@@ -174,6 +174,29 @@ export function useSetVisionModeEnabled() {
     });
 }
 
+export function useMobileWebSearchEnabled() {
+    const { data: appMetadata } = useAppMetadata();
+    return appMetadata?.["mobile_web_search_enabled"] === "true";
+}
+
+export function useSetMobileWebSearchEnabled() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationKey: ["setMobileWebSearchEnabled"] as const,
+        mutationFn: async (enabled: boolean) => {
+            await db.execute(
+                "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)",
+                ["mobile_web_search_enabled", enabled ? "true" : "false"],
+            );
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: appMetadataKeys.appMetadata(),
+            });
+        },
+    });
+}
+
 export async function getApiKeys() {
     const settingsManager = SettingsManager.getInstance();
     const settings = await settingsManager.get();

@@ -461,6 +461,8 @@ export function ChatInput({
 
     // Update focus when dialog closes or chat id changes
     useEffect(() => {
+        if (isMobileApp) return;
+
         if (isDialogClosed) {
             // Use requestAnimationFrame to ensure DOM is fully rendered
             const focusTimeout = requestAnimationFrame(() => {
@@ -470,7 +472,7 @@ export function ChatInput({
             });
             return () => cancelAnimationFrame(focusTimeout);
         }
-    }, [inputRef, chatId, isDialogClosed]);
+    }, [inputRef, chatId, isDialogClosed, isMobileApp]);
 
     useShortcut(
         ["meta", "j"],
@@ -607,7 +609,7 @@ export function ChatInput({
                     className="ring-0
                 placeholder:text-muted-foreground/50 font-[350] focus:outline-none pt-2 px-1.5 select-text
                 max-h-[60vh] overflow-y-auto my-2 rounded-none !p-0"
-                    autoFocus
+                    autoFocus={!isMobileApp}
                     onFocus={() =>
                         inputActions.setFocusedInputId(
                             isReply

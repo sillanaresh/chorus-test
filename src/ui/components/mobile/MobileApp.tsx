@@ -8,12 +8,17 @@ import {
 } from "react-router-dom";
 import {
     CheckIcon,
+    ChevronDownIcon,
+    GlobeIcon,
     KeyRoundIcon,
     Loader2Icon,
     MenuIcon,
-    MessageSquarePlusIcon,
+    MonitorIcon,
+    MoonIcon,
+    PlusIcon,
     RefreshCcwIcon,
     SettingsIcon,
+    SunIcon,
     Trash2Icon,
     XIcon,
 } from "lucide-react";
@@ -38,6 +43,7 @@ import * as AppMetadataAPI from "@core/chorus/api/AppMetadataAPI";
 import * as ChatAPI from "@core/chorus/api/ChatAPI";
 import * as MessageAPI from "@core/chorus/api/MessageAPI";
 import * as ModelsAPI from "@core/chorus/api/ModelsAPI";
+import * as ToolPermissionsAPI from "@core/chorus/api/ToolPermissionsAPI";
 
 const settingsManager = SettingsManager.getInstance();
 
@@ -69,6 +75,41 @@ function openRouterModelConfigs(modelConfigs: ModelConfig[] | undefined) {
                 isMobileOpenRouterModelUsable(modelConfig),
         ) ?? [],
     );
+}
+
+function useMobileWebSearchToggle() {
+    const enabled = AppMetadataAPI.useMobileWebSearchEnabled();
+    const setMobileWebSearchEnabled =
+        AppMetadataAPI.useSetMobileWebSearchEnabled();
+    const upsertToolPermission = ToolPermissionsAPI.useUpsertToolPermission();
+
+    const setEnabled = useCallback(
+        async (nextEnabled: boolean) => {
+            await setMobileWebSearchEnabled.mutateAsync(nextEnabled);
+
+            if (nextEnabled) {
+                await Promise.all(
+                    ["fetch", "search"].map((toolName) =>
+                        upsertToolPermission.mutateAsync({
+                            toolsetName: "web",
+                            toolName,
+                            permissionType: "always_allow",
+                            lastResponse: "allow",
+                        }),
+                    ),
+                );
+            }
+        },
+        [setMobileWebSearchEnabled, upsertToolPermission],
+    );
+
+    return {
+        enabled,
+        setEnabled,
+        isPending:
+            setMobileWebSearchEnabled.isPending ||
+            upsertToolPermission.isPending,
+    };
 }
 
 function cssPixelValue(value: string | null | undefined) {
@@ -211,11 +252,13 @@ function MobileModelSelect({ compact = false }: { compact?: boolean }) {
     const selectedQuickChatModel = ModelsAPI.useSelectedModelConfigQuickChat();
     const updateQuickChatModel = MessageAPI.useUpdateSelectedModelConfigQuickChat();
     const refreshOpenRouterModels = ModelsAPI.useRefreshOpenRouterModels();
+    const [isPickerOpen, setIsPickerOpen] = useState(false);
 
     const openRouterModels = useMemo(
         () => openRouterModelConfigs(modelConfigsQuery.data),
         [modelConfigsQuery.data],
     );
+    const selectedModel = selectedQuickChatModel.data;
 
     if (modelConfigsQuery.isPending) {
         return (
@@ -230,7 +273,7 @@ function MobileModelSelect({ compact = false }: { compact?: boolean }) {
         <div
             className={
                 compact
-                    ? "flex min-w-0 items-center gap-1.5"
+                    ? "min-w-0"
                     : "flex flex-col gap-2"
             }
         >
@@ -247,46 +290,101 @@ function MobileModelSelect({ compact = false }: { compact?: boolean }) {
                     </button>
                 </div>
             )}
-            <div className="flex min-w-0 items-center gap-2">
-                {selectedQuickChatModel.data && (
+            <button
+                type="button"
+                className={
+                    compact
+                        ? "flex h-9 w-full min-w-0 items-center gap-2 rounded-md border bg-background px-2 text-left text-[13px] active:bg-muted"
+                        : "flex h-11 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-sm active:bg-muted"
+                }
+                onClick={() => setIsPickerOpen(true)}
+                disabled={openRouterModels.length === 0}
+                aria-label="Choose model"
+            >
+                {selectedModel && (
                     <ProviderLogo
                         provider={getProviderName(
-                            selectedQuickChatModel.data.modelId,
+                            selectedModel.modelId,
                         )}
                         size="sm"
                     />
                 )}
-                <select
-                    className={
-                        compact
-                            ? "min-w-0 max-w-[11rem] truncate rounded-md border bg-background px-2 py-1 text-xs"
-                            : "w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    }
-                    value={selectedQuickChatModel.data?.id ?? ""}
-                    onChange={(event) => {
-                        const nextModel = openRouterModels.find(
-                            (modelConfig) =>
-                                modelConfig.id === event.target.value,
-                        );
-                        if (nextModel) {
-                            updateQuickChatModel.mutate({
-                                modelConfig: nextModel,
-                            });
-                        }
+                <span className="min-w-0 flex-1 truncate">
+                    {selectedModel?.displayName ?? "No OpenRouter models"}
+                </span>
+                <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+            </button>
+
+            {isPickerOpen && (
+                <MobileModelPickerSheet
+                    models={openRouterModels}
+                    selectedModelId={selectedModel?.id}
+                    onClose={() => setIsPickerOpen(false)}
+                    onSelect={(modelConfig) => {
+                        updateQuickChatModel.mutate({ modelConfig });
+                        setIsPickerOpen(false);
                     }}
-                    disabled={openRouterModels.length === 0}
-                    aria-label="Model"
-                >
-                    {openRouterModels.length === 0 ? (
-                        <option value="">No OpenRouter models</option>
-                    ) : (
-                        openRouterModels.map((modelConfig) => (
-                            <option key={modelConfig.id} value={modelConfig.id}>
-                                {modelConfig.displayName}
-                            </option>
-                        ))
-                    )}
-                </select>
+                />
+            )}
+        </div>
+    );
+}
+
+function MobileModelPickerSheet({
+    models,
+    selectedModelId,
+    onClose,
+    onSelect,
+}: {
+    models: ModelConfig[];
+    selectedModelId?: string;
+    onClose: () => void;
+    onSelect: (modelConfig: ModelConfig) => void;
+}) {
+    return (
+        <div className="fixed inset-0 z-[70] bg-background">
+            <div className="flex h-full flex-col mobile-safe-top">
+                <div className="flex h-14 items-center justify-between border-b px-4">
+                    <h2 className="text-base font-medium">Choose model</h2>
+                    <button
+                        type="button"
+                        className="flex size-10 items-center justify-center rounded-full active:bg-muted"
+                        onClick={onClose}
+                        aria-label="Close model picker"
+                    >
+                        <XIcon className="size-5" />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto px-2 py-2">
+                    {models.map((modelConfig) => {
+                        const selected = modelConfig.id === selectedModelId;
+                        return (
+                            <button
+                                key={modelConfig.id}
+                                type="button"
+                                className={`flex min-h-14 w-full items-center gap-3 rounded-md px-3 py-2 text-left ${
+                                    selected
+                                        ? "bg-highlight text-highlight-foreground"
+                                        : "active:bg-muted"
+                                }`}
+                                onClick={() => onSelect(modelConfig)}
+                            >
+                                <ProviderLogo
+                                    provider={getProviderName(
+                                        modelConfig.modelId,
+                                    )}
+                                    size="sm"
+                                />
+                                <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                                    {modelConfig.displayName}
+                                </span>
+                                {selected && (
+                                    <CheckIcon className="size-4 shrink-0" />
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );
@@ -300,8 +398,10 @@ function MobileSettingsPanel({
     showClose?: boolean;
 }) {
     const queryClient = useQueryClient();
+    const { mode, setMode } = useTheme();
     const { data: apiKeys } = AppMetadataAPI.useApiKeys();
     const skipOnboarding = AppMetadataAPI.useSkipOnboarding();
+    const mobileWebSearch = useMobileWebSearchToggle();
     const [openRouterKey, setOpenRouterKey] = useState(
         apiKeys?.openrouter ?? "",
     );
@@ -355,7 +455,7 @@ function MobileSettingsPanel({
     const hasOpenRouterKey = Boolean(apiKeys?.openrouter);
 
     return (
-        <div className="flex h-full flex-col bg-background">
+        <div className="flex h-full flex-col bg-background mobile-safe-top">
             <div className="flex items-center justify-between border-b px-4 py-3">
                 <div className="flex items-center gap-2">
                     <KeyRoundIcon className="size-4 text-muted-foreground" />
@@ -374,6 +474,46 @@ function MobileSettingsPanel({
             </div>
 
             <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-5">
+                <section className="flex flex-col gap-2">
+                    <div className="text-sm font-medium">Appearance</div>
+                    <div className="grid grid-cols-3 gap-2">
+                        {[
+                            {
+                                id: "system",
+                                label: "System",
+                                icon: MonitorIcon,
+                            },
+                            { id: "light", label: "Light", icon: SunIcon },
+                            { id: "dark", label: "Dark", icon: MoonIcon },
+                        ].map((option) => {
+                            const Icon = option.icon;
+                            const active = mode === option.id;
+                            return (
+                                <button
+                                    key={option.id}
+                                    type="button"
+                                    className={`flex h-10 items-center justify-center gap-1.5 rounded-md border text-sm ${
+                                        active
+                                            ? "border-primary bg-primary text-background"
+                                            : "bg-background active:bg-muted"
+                                    }`}
+                                    onClick={() =>
+                                        setMode(
+                                            option.id as
+                                                | "system"
+                                                | "light"
+                                                | "dark",
+                                        )
+                                    }
+                                >
+                                    <Icon className="size-4" />
+                                    {option.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </section>
+
                 <section className="flex flex-col gap-2">
                     <label
                         className="text-sm font-medium"
@@ -406,6 +546,45 @@ function MobileSettingsPanel({
                 </section>
 
                 {hasOpenRouterKey && <MobileModelSelect />}
+
+                {hasOpenRouterKey && (
+                    <section className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                                <GlobeIcon className="size-4 text-muted-foreground" />
+                                Web search
+                            </div>
+                            <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                                Allow the selected model to search and fetch
+                                webpages.
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={mobileWebSearch.enabled}
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                                mobileWebSearch.enabled
+                                    ? "bg-green-600"
+                                    : "bg-muted"
+                            }`}
+                            onClick={() =>
+                                void mobileWebSearch.setEnabled(
+                                    !mobileWebSearch.enabled,
+                                )
+                            }
+                            disabled={mobileWebSearch.isPending}
+                        >
+                            <span
+                                className={`absolute top-1 size-5 rounded-full bg-background transition-transform ${
+                                    mobileWebSearch.enabled
+                                        ? "translate-x-6 bg-white"
+                                        : "translate-x-1 bg-background"
+                                }`}
+                            />
+                        </button>
+                    </section>
+                )}
 
                 <button
                     type="button"
@@ -454,7 +633,7 @@ function MobileChatListSheet({
 
     return (
         <div className="fixed inset-0 z-40 bg-background">
-            <div className="flex h-full flex-col pt-[env(safe-area-inset-top)]">
+            <div className="flex h-full flex-col mobile-safe-top">
                 <div className="flex items-center justify-between border-b px-4 py-3">
                     <h2 className="text-base font-medium">Chats</h2>
                     <button
@@ -473,7 +652,7 @@ function MobileChatListSheet({
                         className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary text-sm font-medium text-background"
                         onClick={() => void createNewChat()}
                     >
-                        <MessageSquarePlusIcon className="size-4" />
+                        <PlusIcon className="size-4" />
                         New chat
                     </button>
                 </div>
@@ -558,39 +737,68 @@ function MobileHeader({
     onOpenSettings: () => void;
     onNewChat: () => void;
 }) {
+    const mobileWebSearch = useMobileWebSearchToggle();
+
     return (
         <header className="mobile-header mobile-safe-top border-b bg-background/95 backdrop-blur-xl">
-            <div className="flex h-14 items-center gap-2 px-2">
-                <button
-                    type="button"
-                    className="flex size-10 items-center justify-center rounded-full hover:bg-muted"
-                    onClick={onOpenChats}
-                    aria-label="Open chats"
-                >
-                    <MenuIcon className="size-5" />
-                </button>
-                <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">
-                        {chatTitle(chat)}
+            <div className="flex min-h-[6.25rem] flex-col justify-center gap-2 px-3 py-2">
+                <div className="flex h-11 items-center gap-2">
+                    <button
+                        type="button"
+                        className="flex size-10 items-center justify-center rounded-full active:bg-muted"
+                        onClick={onOpenChats}
+                        aria-label="Open chats"
+                    >
+                        <MenuIcon className="size-5" />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                        <div className="truncate text-[17px] font-medium leading-6">
+                            {chatTitle(chat)}
+                        </div>
                     </div>
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={mobileWebSearch.enabled}
+                        className={`flex size-10 items-center justify-center rounded-full active:bg-muted ${
+                            mobileWebSearch.enabled
+                                ? "bg-green-600 text-white"
+                                : ""
+                        }`}
+                        onClick={() =>
+                            void mobileWebSearch.setEnabled(
+                                !mobileWebSearch.enabled,
+                            )
+                        }
+                        disabled={mobileWebSearch.isPending}
+                        aria-label={
+                            mobileWebSearch.enabled
+                                ? "Disable web search"
+                                : "Enable web search"
+                        }
+                    >
+                        <GlobeIcon className="size-5" />
+                    </button>
+                    <button
+                        type="button"
+                        className="flex size-10 items-center justify-center rounded-full active:bg-muted"
+                        onClick={onNewChat}
+                        aria-label="New chat"
+                    >
+                        <PlusIcon className="size-5" />
+                    </button>
+                    <button
+                        type="button"
+                        className="flex size-10 items-center justify-center rounded-full active:bg-muted"
+                        onClick={onOpenSettings}
+                        aria-label="Open settings"
+                    >
+                        <SettingsIcon className="size-5" />
+                    </button>
+                </div>
+                <div className="pl-12 pr-1">
                     <MobileModelSelect compact />
                 </div>
-                <button
-                    type="button"
-                    className="flex size-10 items-center justify-center rounded-full hover:bg-muted"
-                    onClick={onNewChat}
-                    aria-label="New chat"
-                >
-                    <MessageSquarePlusIcon className="size-5" />
-                </button>
-                <button
-                    type="button"
-                    className="flex size-10 items-center justify-center rounded-full hover:bg-muted"
-                    onClick={onOpenSettings}
-                    aria-label="Open settings"
-                >
-                    <SettingsIcon className="size-5" />
-                </button>
             </div>
         </header>
     );
@@ -825,41 +1033,103 @@ function MobileHome() {
     const navigate = useNavigate();
     const { data: apiKeys } = AppMetadataAPI.useApiKeys();
     const chatsQuery = useQuery(ChatAPI.chatQueries.list());
-    const getOrCreateQuickChat = ChatAPI.useGetOrCreateNewQuickChat();
+    const createChat = ChatAPI.useCreateNewChat();
 
-    const latestQuickChat = useMemo(
+    const mobileChats = useMemo(
         () =>
             chatsQuery.data
                 ?.filter((chat) => chat.quickChat && !chat.gcPrototype)
-                .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0],
+                .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) ?? [],
         [chatsQuery.data],
     );
 
-    useEffect(() => {
-        if (!apiKeys?.openrouter || chatsQuery.isPending) return;
-
-        if (latestQuickChat) {
-            navigate(`/chat/${latestQuickChat.id}`, { replace: true });
-        } else if (getOrCreateQuickChat.isIdle) {
-            getOrCreateQuickChat.mutate();
-        }
-    }, [
-        apiKeys?.openrouter,
-        chatsQuery.isPending,
-        getOrCreateQuickChat,
-        latestQuickChat,
-        navigate,
-    ]);
+    const createNewChat = useCallback(async () => {
+        const chatId = await createChat.mutateAsync({
+            projectId: "quick-chat",
+        });
+        navigate(`/chat/${chatId}`);
+    }, [createChat, navigate]);
 
     if (!apiKeys?.openrouter) {
         return <MobileSettingsPanel showClose={false} />;
     }
 
     return (
-        <div className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">
-            <RetroSpinner />
+        <div className="flex h-full flex-col bg-background mobile-safe-top">
+            <header className="flex min-h-16 items-center justify-between border-b px-4">
+                <div>
+                    <h1 className="text-[22px] font-semibold leading-7">
+                        Chats
+                    </h1>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                        {mobileChats.length === 1
+                            ? "1 conversation"
+                            : `${mobileChats.length} conversations`}
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    className="flex size-10 items-center justify-center rounded-full active:bg-muted"
+                    onClick={() => navigate("/settings")}
+                    aria-label="Open settings"
+                >
+                    <SettingsIcon className="size-5" />
+                </button>
+            </header>
+
+            <main className="relative flex-1 overflow-y-auto px-3 py-3">
+                {chatsQuery.isPending ? (
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                        <RetroSpinner />
+                    </div>
+                ) : mobileChats.length === 0 ? (
+                    <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+                        <h2 className="text-lg font-medium">No chats yet</h2>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                            Start a chat and Chorus will keep it here.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="flex flex-col gap-1 pb-24">
+                        {mobileChats.map((chat) => (
+                            <button
+                                key={chat.id}
+                                type="button"
+                                className="flex min-h-16 w-full items-center rounded-md px-3 text-left active:bg-muted"
+                                onClick={() => navigate(`/chat/${chat.id}`)}
+                            >
+                                <div className="min-w-0 flex-1">
+                                    <div className="truncate text-[16px] font-medium leading-6">
+                                        {chatTitle(chat)}
+                                    </div>
+                                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                                        {new Date(
+                                            chat.updatedAt,
+                                        ).toLocaleDateString()}
+                                    </div>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                <button
+                    type="button"
+                    className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] right-5 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-background shadow-md active:scale-95"
+                    onClick={() => void createNewChat()}
+                    aria-label="New chat"
+                >
+                    <PlusIcon className="size-6" />
+                </button>
+            </main>
         </div>
     );
+}
+
+function MobileSettingsRoute() {
+    const navigate = useNavigate();
+
+    return <MobileSettingsPanel onClose={() => navigate("/")} />;
 }
 
 export default function MobileApp() {
@@ -891,6 +1161,7 @@ export default function MobileApp() {
                         />
                     }
                 />
+                <Route path="/settings" element={<MobileSettingsRoute />} />
                 <Route path="*" element={<MobileHome />} />
             </Routes>
 
@@ -901,7 +1172,7 @@ export default function MobileApp() {
             />
 
             {isSettingsOpen && (
-                <div className="fixed inset-0 z-50 pt-[env(safe-area-inset-top)]">
+                <div className="fixed inset-0 z-50">
                     <MobileSettingsPanel
                         onClose={() => setIsSettingsOpen(false)}
                     />

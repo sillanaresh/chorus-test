@@ -130,7 +130,7 @@ body.chorus-mobile-root {
 
 .mobile-app {
     --mobile-header-height: calc(
-        var(--mobile-safe-area-top, env(safe-area-inset-top)) + 3.5rem
+        var(--mobile-safe-area-top, env(safe-area-inset-top)) + 6.75rem
     );
     height: 100%;
     min-height: 100%;
@@ -184,7 +184,7 @@ body.chorus-mobile-root {
 .mobile-chat-scroll {
     padding-top: calc(var(--mobile-header-height) + 1rem);
     padding-bottom: calc(
-        104px + var(--mobile-safe-area-bottom, env(safe-area-inset-bottom))
+        152px + var(--mobile-safe-area-bottom, env(safe-area-inset-bottom))
     );
     -webkit-overflow-scrolling: touch;
     transition: transform 160ms ease-out;

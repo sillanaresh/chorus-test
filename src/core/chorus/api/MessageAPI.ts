@@ -2515,6 +2515,9 @@ function useStreamToolsMessage() {
                 await queryClient.ensureQueryData(chatQueries.detail(chatId))
             ).projectId;
             const projectContext = await getProjectContext(projectId, chatId);
+            const appMetadata = isMobileApp ? await fetchAppMetadata() : {};
+            const mobileWebSearchEnabled =
+                appMetadata["mobile_web_search_enabled"] === "true";
 
             // this loop adds all MessageParts
             const MAX_AI_TURNS = 40;
@@ -2573,7 +2576,13 @@ function useStreamToolsMessage() {
                     streamingToken,
                 });
 
-                const toolsets = isMobileApp ? [] : await getToolsets();
+                const toolsets = isMobileApp
+                    ? mobileWebSearchEnabled
+                        ? (await getToolsets()).filter(
+                              (toolset) => toolset.name === "web",
+                          )
+                        : []
+                    : await getToolsets();
                 const tools = toolsets.flatMap((toolset) => {
                     return toolset.listTools();
                 });
