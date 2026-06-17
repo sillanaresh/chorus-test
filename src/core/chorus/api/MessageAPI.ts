@@ -38,6 +38,7 @@ import {
     appMetadataKeys,
     getApiKeys,
     getCustomBaseUrl,
+    mobileChatModelConfigKey,
 } from "./AppMetadataAPI";
 import {
     calculateCost,
@@ -2697,6 +2698,7 @@ function usePopulateToolsBlock(chatId: string) {
     const createMessage = useCreateMessage();
     const streamToolsMessage = useStreamToolsMessage();
     const getSelectedModelConfigs = useGetSelectedModelConfigs();
+    const { isMobileApp } = useAppContext();
 
     return useMutation({
         mutationKey: ["populateToolsBlock"] as const,
@@ -2728,6 +2730,19 @@ function usePopulateToolsBlock(chatId: string) {
             } else {
                 // Normal flow: use selected model configs
                 modelConfigs = await getSelectedModelConfigs(isQuickChatWindow);
+
+                if (isQuickChatWindow && isMobileApp) {
+                    const appMetadata = await fetchAppMetadata();
+                    const mobileModelConfigId =
+                        appMetadata[mobileChatModelConfigKey(chatId)];
+                    const mobileModelConfig = mobileModelConfigId
+                        ? await fetchModelConfigById(mobileModelConfigId)
+                        : null;
+
+                    if (mobileModelConfig) {
+                        modelConfigs = [mobileModelConfig];
+                    }
+                }
             }
 
             if (modelConfigs.length === 0) {
@@ -3102,6 +3117,16 @@ export function useGenerateChatTitle() {
     const queryClient = useQueryClient();
     const getMessageSets = useGetMessageSets();
 
+    const fallbackTitleFromMessage = (message: string) =>
+        message
+            .trim()
+            .replace(/\s+/g, " ")
+            .split(" ")
+            .slice(0, 5)
+            .join(" ")
+            .slice(0, 40)
+            .replace(/["']/g, "") || "Untitled Chat";
+
     return useMutation({
         mutationKey: ["generateChatTitle"] as const,
         mutationFn: async ({ chatId }: { chatId: string }) => {
@@ -3129,26 +3154,33 @@ export function useGenerateChatTitle() {
                 return { skipped: true };
             }
 
-            const fullResponse = await simpleLLM(
-                `Based on this first message, write a 1-5 word title for the conversation. Try to put the most important words first. Format your response as <title>YOUR TITLE HERE</title>.
+            let cleanTitle = fallbackTitleFromMessage(userMessageText);
+
+            try {
+                const fullResponse = await simpleLLM(
+                    `Based on this first message, write a 1-5 word title for the conversation. Try to put the most important words first. Format your response as <title>YOUR TITLE HERE</title>.
 If there's no information in the message, just return "Untitled Chat".
 <message>
 ${userMessageText}
 </message>`,
-                {
-                    maxTokens: 100,
-                },
-            );
-            // Extract title from XML tags and clean it up
-            const match = fullResponse.match(/<title>(.*?)<\/title>/s);
-            if (!match || !match[1]) {
-                console.warn("No title found in response:", fullResponse);
-                return;
+                    {
+                        maxTokens: 100,
+                    },
+                );
+                // Extract title from XML tags and clean it up
+                const match = fullResponse.match(/<title>(.*?)<\/title>/s);
+                if (match?.[1]) {
+                    cleanTitle = match[1]
+                        .trim()
+                        .slice(0, 40)
+                        .replace(/["']/g, "");
+                } else {
+                    console.warn("No title found in response:", fullResponse);
+                }
+            } catch (error) {
+                console.warn("Falling back to local chat title", error);
             }
-            const cleanTitle = match[1]
-                .trim()
-                .slice(0, 40)
-                .replace(/["']/g, "");
+
             if (cleanTitle) {
                 console.log("Setting chat title to:", cleanTitle);
                 await db.execute("UPDATE chats SET title = $1 WHERE id = $2", [

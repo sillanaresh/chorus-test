@@ -41,12 +41,12 @@ export const ThinkBlock = ({
         <Collapsible
             open={isOpen}
             onOpenChange={setIsOpen}
-            className="my-4 rounded-md text-muted-foreground text-sm py-1.5 px-1.5 border w-fit max-w-full"
+            className="my-4 max-w-full rounded-md border text-sm text-muted-foreground"
             onClick={(e: React.MouseEvent<HTMLDivElement>) => {
                 e.stopPropagation(); // prevent message from selecting
             }}
         >
-            <CollapsibleTrigger className="group font-geist-mono font-[350] text-left flex items-center justify-left hover:text-foreground">
+            <CollapsibleTrigger className="group flex min-h-10 w-full items-center justify-between gap-3 px-3 py-2 text-left font-geist-mono font-[350] hover:text-foreground">
                 <div className="flex items-center">
                     {!isComplete ? (
                         <Loader2 className="w-3 h-3 mr-2 animate-spin" />
@@ -57,8 +57,8 @@ export const ThinkBlock = ({
                     )}
                     Thoughts
                 </div>
-                <div className="ml-auto flex items-center">
-                    <ChevronDownIcon className="w-3 h-3 ml-4 inline-block transition-transform group-data-[state=open]:rotate-180" />
+                <div className="flex items-center">
+                    <ChevronDownIcon className="w-3 h-3 inline-block transition-transform group-data-[state=open]:rotate-180" />
                 </div>
             </CollapsibleTrigger>
             <CollapsibleContent className="">

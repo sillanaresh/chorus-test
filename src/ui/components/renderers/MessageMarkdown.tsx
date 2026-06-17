@@ -238,7 +238,7 @@ export const MessageMarkdown = ({ text }: { text: string }) => {
             /&lt;thought&gt;([\s\S]*?)(?:&lt;\/thought&gt;|$)/g,
             (_match, content) => {
                 // see comment above re the newlines
-                const isComplete = _match.endsWith("&lt;/think&gt;");
+                const isComplete = _match.endsWith("&lt;/thought&gt;");
                 return `<think complete="${isComplete}">\n${content}\n</think>\n\n`;
             },
         );

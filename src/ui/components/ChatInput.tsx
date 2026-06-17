@@ -95,6 +95,8 @@ export function ChatInput({
     const modelConfigs = ModelsAPI.useModelConfigs();
     const appMetadata = useWaitForAppMetadata();
     const cautiousEnter = appMetadata["cautious_enter"] === "true";
+    const mobileChatModelConfigId =
+        appMetadata[`mobile_chat_model_config_id:${chatId}`];
 
     const { draft, setDraft } = DraftAPI.useAutoSyncMessageDraft(chatId);
 
@@ -120,6 +122,13 @@ export function ChatInput({
     });
 
     const { isQuickChatWindow, isMobileApp } = useAppContext();
+    const selectedMobileQuickChatModel =
+        isQuickChatWindow && isMobileApp
+            ? (modelConfigs.data?.find(
+                  (modelConfig) =>
+                      modelConfig.id === mobileChatModelConfigId,
+              ) ?? selectedQuickChatModel.data)
+            : selectedQuickChatModel.data;
     const focusedChatInputId = useInputStore((state) => state.focusedInputId);
 
     // Create a unique dialog ID for reply model picker
@@ -192,7 +201,7 @@ export function ChatInput({
             if (
                 isQuickChatWindow &&
                 isMobileApp &&
-                !isMobileOpenRouterModelUsable(selectedQuickChatModel.data)
+                !isMobileOpenRouterModelUsable(selectedMobileQuickChatModel)
             ) {
                 toast.error("Choose an available OpenRouter model first");
                 return;
@@ -363,7 +372,7 @@ export function ChatInput({
     const canSubmitMobileQuickChat =
         !isQuickChatWindow ||
         !isMobileApp ||
-        isMobileOpenRouterModelUsable(selectedQuickChatModel.data);
+        isMobileOpenRouterModelUsable(selectedMobileQuickChatModel);
     const canSubmit = hasSubmitContent && canSubmitMobileQuickChat;
 
     const handlePaste = async (
@@ -764,7 +773,7 @@ export function ChatInput({
 
     if (isQuickChatWindow && isMobileApp) {
         return (
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
                 <AttachmentDropArea
                     attachments={attachmentsQuery.data ?? []}
                     onFileDrop={fileDrop.mutate}

@@ -57,7 +57,7 @@ const mobileType = {
 } as const;
 
 const mobileIconButton =
-    "flex size-10 items-center justify-center rounded-full active:bg-muted";
+    "flex size-10 shrink-0 items-center justify-center rounded-full active:bg-muted";
 
 const mobileFab =
     "fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] right-5 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-background shadow-md active:scale-95";
@@ -283,18 +283,34 @@ function MobileModelBootstrap() {
     return null;
 }
 
-function MobileModelSelect({ compact = false }: { compact?: boolean }) {
+function MobileModelSelect({
+    compact = false,
+    chatId,
+}: {
+    compact?: boolean;
+    chatId?: string;
+}) {
     const modelConfigsQuery = ModelsAPI.useModelConfigs();
     const selectedQuickChatModel = ModelsAPI.useSelectedModelConfigQuickChat();
     const updateQuickChatModel = MessageAPI.useUpdateSelectedModelConfigQuickChat();
     const refreshOpenRouterModels = ModelsAPI.useRefreshOpenRouterModels();
+    const mobileChatModelConfigId =
+        AppMetadataAPI.useMobileChatModelConfigId(chatId);
+    const setMobileChatModelConfigId =
+        AppMetadataAPI.useSetMobileChatModelConfigId();
     const [isPickerOpen, setIsPickerOpen] = useState(false);
 
     const openRouterModels = useMemo(
         () => openRouterModelConfigs(modelConfigsQuery.data),
         [modelConfigsQuery.data],
     );
-    const selectedModel = selectedQuickChatModel.data;
+    const selectedModel =
+        (chatId
+            ? openRouterModels.find(
+                  (modelConfig) => modelConfig.id === mobileChatModelConfigId,
+              )
+            : undefined) ??
+        selectedQuickChatModel.data;
 
     if (modelConfigsQuery.isPending) {
         return (
@@ -357,7 +373,14 @@ function MobileModelSelect({ compact = false }: { compact?: boolean }) {
                     selectedModelId={selectedModel?.id}
                     onClose={() => setIsPickerOpen(false)}
                     onSelect={(modelConfig) => {
-                        updateQuickChatModel.mutate({ modelConfig });
+                        if (chatId) {
+                            setMobileChatModelConfigId.mutate({
+                                chatId,
+                                modelConfigId: modelConfig.id,
+                            });
+                        } else {
+                            updateQuickChatModel.mutate({ modelConfig });
+                        }
                         setIsPickerOpen(false);
                     }}
                 />
@@ -391,14 +414,14 @@ function MobileModelPickerSheet({
                         <XIcon className="size-5" />
                     </button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-2 py-2">
+                <div className="flex-1 overflow-y-auto px-3 py-2">
                     {models.map((modelConfig) => {
                         const selected = modelConfig.id === selectedModelId;
                         return (
                             <button
                                 key={modelConfig.id}
                                 type="button"
-                                className={`flex min-h-14 w-full items-center gap-3 rounded-md px-3 py-2 text-left ${
+                                className={`flex min-h-14 w-full items-center gap-3 rounded-lg px-3 py-2 text-left ${
                                     selected
                                         ? "bg-highlight text-highlight-foreground"
                                         : "active:bg-muted"
@@ -696,7 +719,7 @@ function MobileChatListSheet({
                     </div>
                 </div>
 
-                <div className="relative flex-1 overflow-y-auto px-3 py-3">
+                <div className="relative flex-1 overflow-y-auto px-4 py-3">
                     {mobileChats.map((chat) => (
                         <button
                             key={chat.id}
@@ -787,8 +810,8 @@ function MobileHeader({
 
     return (
         <header className="mobile-header mobile-safe-top border-b bg-background/95 backdrop-blur-xl">
-            <div className="flex min-h-[6.25rem] flex-col justify-center gap-2 px-3 py-2">
-                <div className="flex h-11 items-center gap-2">
+            <div className="flex min-h-[5.75rem] flex-col justify-center gap-2 px-4 py-2">
+                <div className="flex h-10 items-center gap-2">
                     <button
                         type="button"
                         className={mobileIconButton}
@@ -832,8 +855,8 @@ function MobileHeader({
                         <PlusIcon className="size-5" />
                     </button>
                 </div>
-                <div className="pl-12 pr-1">
-                    <MobileModelSelect compact />
+                <div className="px-0.5">
+                    <MobileModelSelect compact chatId={chat?.id} />
                 </div>
             </div>
         </header>
@@ -855,7 +878,7 @@ function MobileAssistantMessage({ message }: { message: Message }) {
 
     return (
         <div className="flex w-full justify-start">
-            <div className="min-w-0 max-w-full rounded-md border bg-background px-3.5 py-3 shadow-sm">
+            <div className="min-w-0 max-w-[94%] rounded-lg border bg-background px-4 py-3 shadow-sm">
                 <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                     {modelConfig && (
                         <ProviderLogo
@@ -1023,7 +1046,7 @@ function MobileChatRoute({
                 onNewChat={() => void createNewChat()}
             />
 
-            <main className="mobile-chat-scroll flex-1 overflow-y-auto px-3 pt-4">
+            <main className="mobile-chat-scroll flex-1 overflow-y-auto px-4 pt-4">
                 {messageSets.length === 0 ? (
                     <div className="flex h-full min-h-[45dvh] flex-col items-center justify-center px-6 text-center">
                         <div className="font-geist-mono text-[11px] uppercase text-muted-foreground">
@@ -1034,7 +1057,7 @@ function MobileChatRoute({
                         </h1>
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-4 pb-4">
+                    <div className="mx-auto flex w-full max-w-[42rem] flex-col gap-4 pb-4">
                         {messageSets.map((messageSet) => (
                             <MobileMessageSet
                                 key={messageSet.id}
@@ -1088,7 +1111,7 @@ function MobileHome() {
 
     return (
         <div className="flex h-full flex-col bg-background mobile-safe-top">
-            <header className="flex min-h-16 items-center justify-between border-b px-4">
+            <header className="flex min-h-16 items-center justify-between border-b px-5">
                 <div>
                     <h1 className={mobileType.screenTitle}>Chats</h1>
                     <div className={`mt-0.5 ${mobileType.rowMeta}`}>
@@ -1107,7 +1130,7 @@ function MobileHome() {
                 </button>
             </header>
 
-            <main className="relative flex-1 overflow-y-auto px-3 py-3">
+            <main className="relative flex-1 overflow-y-auto px-4 py-3">
                 {chatsQuery.isPending ? (
                     <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                         <RetroSpinner />
@@ -1125,7 +1148,7 @@ function MobileHome() {
                             <button
                                 key={chat.id}
                                 type="button"
-                                className="flex min-h-16 w-full items-center rounded-md px-3 text-left active:bg-muted"
+                                className="flex min-h-16 w-full items-center rounded-lg px-3 text-left active:bg-muted"
                                 onClick={() => navigate(`/chat/${chat.id}`)}
                             >
                                 <div className="min-w-0 flex-1">
