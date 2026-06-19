@@ -87,7 +87,7 @@ const mobileHeaderAction =
 const mobileFab =
     "fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] right-5 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-background shadow-md active:scale-95";
 
-const mobileWebOn = "border-accent-800 bg-accent-800 text-accent-25";
+const mobileWebOn = "border-accent-800 bg-accent-800 !text-accent-25";
 
 function isOpenRouterModel(modelConfig: ModelConfig | undefined | null) {
     if (!modelConfig) return false;
