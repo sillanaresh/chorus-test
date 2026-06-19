@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { db } from "../DB";
 import { SettingsManager } from "@core/utilities/Settings";
 import * as Models from "../Models";
+import { fetch as httpFetch } from "@tauri-apps/plugin-http";
 
 export const appMetadataKeys = {
     appMetadata: () => ["appMetadata"] as const,
@@ -189,7 +190,8 @@ export function mobileChatModelConfigKey(chatId: string) {
 
 export function useMobileChatWebSearchEnabled(chatId: string | undefined) {
     const { data: appMetadata } = useAppMetadata();
-    const defaultEnabled = appMetadata?.["mobile_web_search_enabled"] === "true";
+    const defaultEnabled =
+        appMetadata?.["mobile_web_search_enabled"] === "true";
     if (!chatId) return defaultEnabled;
 
     const chatValue = appMetadata?.[mobileChatWebSearchKey(chatId)];
@@ -271,6 +273,27 @@ export async function getApiKeys() {
     const settingsManager = SettingsManager.getInstance();
     const settings = await settingsManager.get();
     return (settings.apiKeys || {}) as Models.ApiKeys;
+}
+
+export async function testOpenRouterConnection(apiKey: string) {
+    const abortController = new AbortController();
+    const timeout = window.setTimeout(() => abortController.abort(), 15000);
+
+    try {
+        const response = await httpFetch("https://openrouter.ai/api/v1/key", {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${apiKey.trim()}`,
+            },
+            signal: abortController.signal,
+        });
+        return response.ok;
+    } catch (error) {
+        console.error("OpenRouter connection test failed", error);
+        return false;
+    } finally {
+        window.clearTimeout(timeout);
+    }
 }
 
 export async function getCustomBaseUrl() {

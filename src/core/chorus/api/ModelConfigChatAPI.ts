@@ -4,13 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { db } from "../DB";
 import { v4 as uuidv4 } from "uuid";
 
-const modelConfigChatKeys = {
+export const modelConfigChatKeys = {
     savedModelConfigChat: (chatId: string) =>
         ["savedModelConfig", chatId] as const,
 };
 
 // Saved model config functions
-async function fetchSavedModelConfigChat(
+export async function fetchSavedModelConfigChat(
     chatId: string,
 ): Promise<string[] | null> {
     const rows = await db.select<{ model_ids: string }[]>(
@@ -59,10 +59,12 @@ export async function updateSavedModelConfigChat(
     }
 }
 
-export function useSavedModelConfigChat(chatId: string) {
+export function useSavedModelConfigChat(chatId: string | undefined) {
     return useQuery({
-        queryKey: modelConfigChatKeys.savedModelConfigChat(chatId),
-        queryFn: () => fetchSavedModelConfigChat(chatId),
+        queryKey: modelConfigChatKeys.savedModelConfigChat(chatId ?? ""),
+        queryFn: () =>
+            chatId ? fetchSavedModelConfigChat(chatId) : Promise.resolve(null),
+        enabled: Boolean(chatId),
     });
 }
 
@@ -77,7 +79,24 @@ export function useUpdateSavedModelConfigChat() {
             chatId: string;
             modelIds: string[];
         }) => updateSavedModelConfigChat(chatId, modelIds),
-        onSuccess: (_data, variables) => {
+        onMutate: async (variables) => {
+            const queryKey = modelConfigChatKeys.savedModelConfigChat(
+                variables.chatId,
+            );
+            await queryClient.cancelQueries({ queryKey });
+            const previousModelIds = queryClient.getQueryData<string[] | null>(
+                queryKey,
+            );
+            queryClient.setQueryData(queryKey, variables.modelIds);
+            return { previousModelIds };
+        },
+        onError: (_error, variables, context) => {
+            queryClient.setQueryData(
+                modelConfigChatKeys.savedModelConfigChat(variables.chatId),
+                context?.previousModelIds,
+            );
+        },
+        onSettled: (_data, _error, variables) => {
             void queryClient.invalidateQueries({
                 queryKey: modelConfigChatKeys.savedModelConfigChat(
                     variables.chatId,

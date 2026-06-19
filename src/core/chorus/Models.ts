@@ -365,10 +365,16 @@ export async function DEPRECATED_USE_HOOK_INSTEAD_downloadModels(
  * Downloads models from OpenRouter to refresh the database.
  */
 export async function downloadOpenRouterModels(db: Database): Promise<number> {
-    const response = await fetch("https://openrouter.ai/api/v1/models");
+    const abortController = new AbortController();
+    const timeout = window.setTimeout(() => abortController.abort(), 15000);
+    const response = await fetch("https://openrouter.ai/api/v1/models", {
+        signal: abortController.signal,
+    }).finally(() => window.clearTimeout(timeout));
+
     if (!response.ok) {
-        console.error("Failed to fetch OpenRouter models");
-        return 0;
+        throw new Error(
+            `Failed to fetch OpenRouter models (${response.status})`,
+        );
     }
     const { data: openRouterModels } = (await response.json()) as {
         data: {
@@ -386,48 +392,76 @@ export async function downloadOpenRouterModels(db: Database): Promise<number> {
         }[];
     };
 
+    const rows = openRouterModels.map((model) => {
+        const supportsImages =
+            Array.isArray(model.architecture?.input_modalities) &&
+            model.architecture.input_modalities.includes("image");
+        const promptPrice = parseFloat(model.pricing.prompt);
+        const completionPrice = parseFloat(model.pricing.completion);
+        const hasPricing =
+            Number.isFinite(promptPrice) && Number.isFinite(completionPrice);
+
+        return {
+            id: `openrouter::${model.id}`,
+            displayName: model.name,
+            supportedAttachmentTypes: JSON.stringify(
+                supportsImages
+                    ? ["text", "image", "webpage"]
+                    : ["text", "webpage"],
+            ),
+            promptPrice: hasPricing ? promptPrice : null,
+            completionPrice: hasPricing ? completionPrice : null,
+        };
+    });
+
+    const chunks = <T>(items: T[], size: number) =>
+        Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
+            items.slice(index * size, (index + 1) * size),
+        );
+
     await db.execute(
         "UPDATE models SET is_enabled = 0 WHERE id LIKE 'openrouter::%'",
     );
 
-    await Promise.all(
-        openRouterModels.map((model) => {
-            // Check if the model supports images based on API metadata
-            // Use Array.isArray check to ensure input_modalities is an array before calling includes
-            const supportsImages =
-                Array.isArray(model.architecture?.input_modalities) &&
-                model.architecture.input_modalities.includes("image");
+    for (const chunk of chunks(rows, 100)) {
+        const modelPlaceholders = chunk
+            .map(() => "(?, ?, 1, ?, 0, ?, ?)")
+            .join(", ");
+        await db.execute(
+            `INSERT INTO models (
+                id, display_name, is_enabled, supported_attachment_types,
+                is_internal, prompt_price_per_token, completion_price_per_token
+            ) VALUES ${modelPlaceholders}
+            ON CONFLICT(id) DO UPDATE SET
+                display_name = excluded.display_name,
+                is_enabled = excluded.is_enabled,
+                supported_attachment_types = excluded.supported_attachment_types,
+                is_internal = excluded.is_internal,
+                prompt_price_per_token = excluded.prompt_price_per_token,
+                completion_price_per_token = excluded.completion_price_per_token`,
+            chunk.flatMap((model) => [
+                model.id,
+                model.displayName,
+                model.supportedAttachmentTypes,
+                model.promptPrice,
+                model.completionPrice,
+            ]),
+        );
 
-            // Parse and validate pricing data
-            const promptPrice = parseFloat(model.pricing.prompt);
-            const completionPrice = parseFloat(model.pricing.completion);
-            const hasPricing =
-                !isNaN(promptPrice) &&
-                !isNaN(completionPrice) &&
-                isFinite(promptPrice) &&
-                isFinite(completionPrice);
-
-            return saveModelAndDefaultConfig(
-                db,
-                {
-                    id: `openrouter::${model.id}`,
-                    displayName: `${model.name}`,
-                    supportedAttachmentTypes: supportsImages
-                        ? ["text", "image", "webpage"]
-                        : ["text", "webpage"],
-                    isEnabled: true,
-                    isInternal: false,
-                },
-                `${model.name}`,
-                hasPricing
-                    ? {
-                          promptPricePerToken: promptPrice,
-                          completionPricePerToken: completionPrice,
-                      }
-                    : undefined,
-            );
-        }),
-    );
+        const configPlaceholders = chunk
+            .map(() => "(?, ?, 'system', ?, '')")
+            .join(", ");
+        await db.execute(
+            `INSERT INTO model_configs (
+                id, display_name, author, model_id, system_prompt
+            ) VALUES ${configPlaceholders}
+            ON CONFLICT(id) DO UPDATE SET
+                display_name = excluded.display_name,
+                author = excluded.author,
+                model_id = excluded.model_id`,
+            chunk.flatMap((model) => [model.id, model.displayName, model.id]),
+        );
+    }
 
     return openRouterModels.length;
 }

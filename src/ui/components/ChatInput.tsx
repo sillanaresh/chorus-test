@@ -95,8 +95,6 @@ export function ChatInput({
     const modelConfigs = ModelsAPI.useModelConfigs();
     const appMetadata = useWaitForAppMetadata();
     const cautiousEnter = appMetadata["cautious_enter"] === "true";
-    const mobileChatModelConfigId =
-        appMetadata[`mobile_chat_model_config_id:${chatId}`];
 
     const { draft, setDraft } = DraftAPI.useAutoSyncMessageDraft(chatId);
 
@@ -122,14 +120,21 @@ export function ChatInput({
     });
 
     const { isQuickChatWindow, isMobileApp } = useAppContext();
-    const selectedMobileQuickChatModel =
-        isQuickChatWindow && isMobileApp
-            ? (modelConfigs.data?.find(
-                  (modelConfig) =>
-                      modelConfig.id === mobileChatModelConfigId,
-              ) ?? selectedQuickChatModel.data)
-            : selectedQuickChatModel.data;
+    const savedMobileChatModel = ModelConfigChatAPI.useSavedModelConfigChat(
+        isQuickChatWindow && isMobileApp ? chatId : undefined,
+    );
     const focusedChatInputId = useInputStore((state) => state.focusedInputId);
+    const selectedQuickChatModelForChat = useMemo(() => {
+        const savedModelId = savedMobileChatModel.data?.[0];
+        return (
+            modelConfigs.data?.find((model) => model.id === savedModelId) ??
+            selectedQuickChatModel.data
+        );
+    }, [
+        modelConfigs.data,
+        savedMobileChatModel.data,
+        selectedQuickChatModel.data,
+    ]);
 
     // Create a unique dialog ID for reply model picker
     const MANAGE_MODELS_REPLY_DIALOG_ID = `manage-models-reply-${chatId}`;
@@ -201,7 +206,7 @@ export function ChatInput({
             if (
                 isQuickChatWindow &&
                 isMobileApp &&
-                !isMobileOpenRouterModelUsable(selectedMobileQuickChatModel)
+                !isMobileOpenRouterModelUsable(selectedQuickChatModelForChat)
             ) {
                 toast.error("Choose an available OpenRouter model first");
                 return;
@@ -339,7 +344,10 @@ export function ChatInput({
             await forceRefreshMessageSets(chatId);
 
             // generate chat title if needed
-            void generateChatTitle.mutateAsync({ chatId });
+            void generateChatTitle.mutateAsync({
+                chatId,
+                userMessageText,
+            });
 
             // mark project context summary as stale
             // we'll do this again when the AI message finishes streaming
@@ -372,7 +380,7 @@ export function ChatInput({
     const canSubmitMobileQuickChat =
         !isQuickChatWindow ||
         !isMobileApp ||
-        isMobileOpenRouterModelUsable(selectedMobileQuickChatModel);
+        isMobileOpenRouterModelUsable(selectedQuickChatModelForChat);
     const canSubmit = hasSubmitContent && canSubmitMobileQuickChat;
 
     const handlePaste = async (
@@ -784,6 +792,11 @@ export function ChatInput({
                 <form
                     onSubmit={handleSubmit}
                     className="flex min-h-12 items-end gap-2"
+                    onPointerDown={(event) => {
+                        if (event.target === event.currentTarget) {
+                            inputRef.current?.focus();
+                        }
+                    }}
                 >
                     <button
                         type="button"
@@ -815,8 +828,11 @@ export function ChatInput({
                             }
                         }}
                         placeholder={placeholderText}
-                        className="max-h-[32dvh] min-h-11 flex-1 rounded-xl border bg-foreground/5 px-3 py-2.5 text-[16px] leading-6 placeholder:text-foreground/45 focus:outline-none focus:ring-0"
+                        className="max-h-[32dvh] min-h-11 flex-1 rounded-2xl border bg-foreground/5 px-3.5 py-2.5 text-[17px] leading-[25px] placeholder:text-foreground/45 focus:outline-none focus:ring-0"
                         autoFocus={false}
+                        autoComplete="off"
+                        enterKeyHint="send"
+                        inputMode="text"
                         onFocus={() =>
                             inputActions.setFocusedInputId(
                                 isReply
@@ -870,11 +886,7 @@ export function ChatInput({
                         }
                     } else {
                         // Normal mode: Enter to submit, Shift+Enter for newline
-                        if (
-                            e.key === "Enter" &&
-                            !e.shiftKey &&
-                            !isMobileApp
-                        ) {
+                        if (e.key === "Enter" && !e.shiftKey && !isMobileApp) {
                             e.preventDefault();
                             handleSubmit(e);
                         }

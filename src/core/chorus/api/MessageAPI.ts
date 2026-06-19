@@ -32,13 +32,16 @@ import _ from "lodash";
 import { useAppContext } from "@ui/hooks/useAppContext";
 import { db } from "../DB";
 import { draftKeys } from "./DraftAPI";
-import { updateSavedModelConfigChat } from "./ModelConfigChatAPI";
-import { chatIsLoadingQueries, chatQueries } from "./ChatAPI";
+import {
+    fetchSavedModelConfigChat,
+    updateSavedModelConfigChat,
+} from "./ModelConfigChatAPI";
+import { chatIsLoadingQueries, chatQueries, localChatTitle } from "./ChatAPI";
 import {
     appMetadataKeys,
+    fetchAppMetadata,
     getApiKeys,
     getCustomBaseUrl,
-    mobileChatModelConfigKey,
 } from "./AppMetadataAPI";
 import {
     calculateCost,
@@ -51,7 +54,6 @@ import {
     useMarkProjectContextSummaryAsStale,
 } from "./ProjectAPI";
 import { useGetToolsets } from "./ToolsetsAPI";
-import { fetchAppMetadata } from "./AppMetadataAPI";
 import {
     modelConfigQueries,
     useModelConfigs,
@@ -601,7 +603,28 @@ export function useMessageSets(
     return useQuery({
         select,
         queryKey: messageKeys.messageSets(chatId),
-        queryFn: () => fetchMessageSets(chatId),
+        queryFn: () => {
+            let timeoutId: number | undefined;
+            const timeout = new Promise<never>((_resolve, reject) => {
+                timeoutId = window.setTimeout(
+                    () =>
+                        reject(
+                            new Error(
+                                "The conversation took too long to load.",
+                            ),
+                        ),
+                    10000,
+                );
+            });
+
+            return Promise.race([fetchMessageSets(chatId), timeout]).finally(
+                () => {
+                    if (timeoutId !== undefined) {
+                        window.clearTimeout(timeoutId);
+                    }
+                },
+            );
+        },
     });
 }
 
@@ -2698,7 +2721,6 @@ function usePopulateToolsBlock(chatId: string) {
     const createMessage = useCreateMessage();
     const streamToolsMessage = useStreamToolsMessage();
     const getSelectedModelConfigs = useGetSelectedModelConfigs();
-    const { isMobileApp } = useAppContext();
 
     return useMutation({
         mutationKey: ["populateToolsBlock"] as const,
@@ -2729,20 +2751,10 @@ function usePopulateToolsBlock(chatId: string) {
                 modelConfigs = [modelConfig];
             } else {
                 // Normal flow: use selected model configs
-                modelConfigs = await getSelectedModelConfigs(isQuickChatWindow);
-
-                if (isQuickChatWindow && isMobileApp) {
-                    const appMetadata = await fetchAppMetadata();
-                    const mobileModelConfigId =
-                        appMetadata[mobileChatModelConfigKey(chatId)];
-                    const mobileModelConfig = mobileModelConfigId
-                        ? await fetchModelConfigById(mobileModelConfigId)
-                        : null;
-
-                    if (mobileModelConfig) {
-                        modelConfigs = [mobileModelConfig];
-                    }
-                }
+                modelConfigs = await getSelectedModelConfigs(
+                    isQuickChatWindow,
+                    chatId,
+                );
             }
 
             if (modelConfigs.length === 0) {
@@ -3117,19 +3129,15 @@ export function useGenerateChatTitle() {
     const queryClient = useQueryClient();
     const getMessageSets = useGetMessageSets();
 
-    const fallbackTitleFromMessage = (message: string) =>
-        message
-            .trim()
-            .replace(/\s+/g, " ")
-            .split(" ")
-            .slice(0, 5)
-            .join(" ")
-            .slice(0, 40)
-            .replace(/["']/g, "") || "Untitled Chat";
-
     return useMutation({
         mutationKey: ["generateChatTitle"] as const,
-        mutationFn: async ({ chatId }: { chatId: string }) => {
+        mutationFn: async ({
+            chatId,
+            userMessageText: providedUserMessageText,
+        }: {
+            chatId: string;
+            userMessageText?: string;
+        }) => {
             // check if there's already a title
             const chat = await queryClient.ensureQueryData(
                 chatQueries.detail(chatId),
@@ -3139,58 +3147,79 @@ export function useGenerateChatTitle() {
                 // if the previous title was "Untitled Chat", might as well try to regenerate it
                 chat.title !== "Untitled Chat"
             ) {
+                if (chat.isNewChat) {
+                    await db.execute(
+                        "UPDATE chats SET is_new_chat = 0, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+                        [chatId],
+                    );
+                }
                 console.log("Skipping title generation for chat", chatId);
-                return { skipped: true };
+                return { skipped: true, chatFinalized: chat.isNewChat };
             }
 
-            const messageSets = await getMessageSets(chatId);
-            const userMessageText = Array.from(messageSets) // copy so we can reverse
-                .reverse()
-                .map((ms) => ms.userBlock?.message?.text)
-                .find((m) => m !== undefined);
+            const userMessageText =
+                providedUserMessageText ||
+                Array.from(await getMessageSets(chatId))
+                    .reverse()
+                    .map((ms) => ms.userBlock?.message?.text)
+                    .find((message) => Boolean(message?.trim()));
 
             if (!userMessageText) {
                 console.log("Skipping title generation for chat", chatId);
                 return { skipped: true };
             }
 
-            let cleanTitle = fallbackTitleFromMessage(userMessageText);
+            const fallbackTitle = localChatTitle(userMessageText);
+            await db.execute(
+                "UPDATE chats SET title = $1, is_new_chat = 0, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+                [fallbackTitle, chatId],
+            );
 
-            try {
-                const fullResponse = await simpleLLM(
-                    `Based on this first message, write a 1-5 word title for the conversation. Try to put the most important words first. Format your response as <title>YOUR TITLE HERE</title>.
+            await Promise.all([
+                queryClient.invalidateQueries(chatQueries.list()),
+                queryClient.invalidateQueries(chatQueries.detail(chatId)),
+            ]);
+
+            void simpleLLM(
+                `Based on this first message, write a 1-5 word title for the conversation. Try to put the most important words first. Format your response as <title>YOUR TITLE HERE</title>.
 If there's no information in the message, just return "Untitled Chat".
 <message>
 ${userMessageText}
 </message>`,
-                    {
-                        maxTokens: 100,
-                    },
-                );
-                // Extract title from XML tags and clean it up
-                const match = fullResponse.match(/<title>(.*?)<\/title>/s);
-                if (match?.[1]) {
-                    cleanTitle = match[1]
-                        .trim()
+                {
+                    maxTokens: 100,
+                },
+            )
+                .then(async (fullResponse) => {
+                    const match = fullResponse.match(/<title>(.*?)<\/title>/s);
+                    const cleanTitle = match?.[1]
+                        ?.trim()
                         .slice(0, 40)
                         .replace(/["']/g, "");
-                } else {
-                    console.warn("No title found in response:", fullResponse);
-                }
-            } catch (error) {
-                console.warn("Falling back to local chat title", error);
-            }
+                    if (!cleanTitle) return;
 
-            if (cleanTitle) {
-                console.log("Setting chat title to:", cleanTitle);
-                await db.execute("UPDATE chats SET title = $1 WHERE id = $2", [
-                    cleanTitle,
-                    chatId,
-                ]);
-            }
+                    await db.execute(
+                        "UPDATE chats SET title = $1 WHERE id = $2 AND title = $3",
+                        [cleanTitle, chatId, fallbackTitle],
+                    );
+                    await Promise.all([
+                        queryClient.invalidateQueries(chatQueries.list()),
+                        queryClient.invalidateQueries(
+                            chatQueries.detail(chatId),
+                        ),
+                    ]);
+                })
+                .catch((error) => {
+                    console.warn(
+                        "Keeping local chat title after title refinement failed",
+                        error,
+                    );
+                });
+
+            return { skipped: false, chatFinalized: true };
         },
         onSuccess: async (data, variables) => {
-            if (!data?.skipped) {
+            if (!data?.skipped || data?.chatFinalized) {
                 await queryClient.invalidateQueries(chatQueries.list());
                 await queryClient.invalidateQueries(
                     chatQueries.detail(variables.chatId),
@@ -3340,11 +3369,30 @@ export function useUpdateSelectedModelConfigQuickChat() {
 export function useGetSelectedModelConfigs() {
     const queryClient = useQueryClient();
 
-    return async (isQuickChatWindow: boolean) => {
+    return async (isQuickChatWindow: boolean, chatId?: string) => {
         if (isQuickChatWindow) {
+            if (chatId) {
+                const savedModelIds = await fetchSavedModelConfigChat(chatId);
+                if (savedModelIds?.length) {
+                    const savedModels = (
+                        await Promise.all(
+                            savedModelIds.map((modelId) =>
+                                fetchModelConfigById(modelId),
+                            ),
+                        )
+                    ).filter((model): model is ModelConfig => Boolean(model));
+                    if (savedModels.length > 0) return savedModels;
+                }
+            }
+
             const quickChatModelConfig = await queryClient.ensureQueryData(
                 modelConfigQueries.quickChat(),
             );
+            if (chatId && quickChatModelConfig) {
+                await updateSavedModelConfigChat(chatId, [
+                    quickChatModelConfig.id,
+                ]);
+            }
             return quickChatModelConfig ? [quickChatModelConfig] : [];
         } else {
             return await queryClient.ensureQueryData(

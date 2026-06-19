@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+    memo,
+    useCallback,
+    useDeferredValue,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
+import { createPortal } from "react-dom";
 import {
     Route,
     Routes,
@@ -7,16 +16,25 @@ import {
     useParams,
 } from "react-router-dom";
 import {
+    ArrowLeftIcon,
+    CircleCheckIcon,
+    CircleXIcon,
     CheckIcon,
     ChevronDownIcon,
+    EllipsisVerticalIcon,
     GlobeIcon,
+    InfoIcon,
     KeyRoundIcon,
     Loader2Icon,
     MenuIcon,
     MonitorIcon,
     MoonIcon,
+    PencilIcon,
+    PinIcon,
+    PinOffIcon,
     PlusIcon,
     RefreshCcwIcon,
+    SearchIcon,
     SettingsIcon,
     SunIcon,
     Trash2Icon,
@@ -28,6 +46,7 @@ import { ChatInput } from "@ui/components/ChatInput";
 import { AttachmentPillsList } from "@ui/components/AttachmentsViews";
 import RetroSpinner from "@ui/components/ui/retro-spinner";
 import { ProviderLogo } from "@ui/components/ui/provider-logo";
+import { Switch } from "@ui/components/ui/switch";
 import { MessageMarkdown } from "@ui/components/renderers/MessageMarkdown";
 import { useTheme } from "@ui/hooks/useTheme";
 import type { MouseTrackingEyeRef } from "@ui/components/MouseTrackingEye";
@@ -42,18 +61,21 @@ import type { Message, MessageSetDetail } from "@core/chorus/ChatState";
 import * as AppMetadataAPI from "@core/chorus/api/AppMetadataAPI";
 import * as ChatAPI from "@core/chorus/api/ChatAPI";
 import * as MessageAPI from "@core/chorus/api/MessageAPI";
+import * as ModelConfigChatAPI from "@core/chorus/api/ModelConfigChatAPI";
 import * as ModelsAPI from "@core/chorus/api/ModelsAPI";
 import * as ToolPermissionsAPI from "@core/chorus/api/ToolPermissionsAPI";
 
 const settingsManager = SettingsManager.getInstance();
 
 const mobileType = {
+    appTitle: "text-[30px] font-semibold leading-9",
     screenTitle: "text-[22px] font-semibold leading-7",
-    headerTitle: "text-[17px] font-medium leading-6",
-    rowTitle: "text-[16px] font-medium leading-6",
-    rowMeta: "text-[13px] leading-5 text-muted-foreground",
-    body: "text-[15px] leading-6",
-    label: "text-sm font-medium",
+    headerTitle: "text-[17px] font-semibold leading-[22px]",
+    rowTitle: "text-[17px] font-medium leading-[22px]",
+    rowMeta: "text-[14px] leading-[19px] text-muted-foreground",
+    body: "text-[17px] leading-[25px]",
+    label: "text-[15px] font-semibold leading-5",
+    caption: "text-[13px] leading-[18px] text-muted-foreground",
 } as const;
 
 const mobileIconButton =
@@ -78,8 +100,342 @@ function isOpenRouterModel(modelConfig: ModelConfig | undefined | null) {
 
 function chatTitle(chat: Chat | undefined) {
     if (!chat) return "Chorus";
+    if (chat.title?.trim()) return chat.title.trim();
     if (chat.isNewChat) return "New chat";
-    return chat.title?.trim() || "Untitled";
+    return "Untitled";
+}
+
+function formatChatDate(updatedAt: string) {
+    const date = new Date(updatedAt);
+    const today = new Date();
+    const sameDay =
+        date.getFullYear() === today.getFullYear() &&
+        date.getMonth() === today.getMonth() &&
+        date.getDate() === today.getDate();
+
+    if (sameDay) {
+        return date.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+        });
+    }
+
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const wasYesterday =
+        date.getFullYear() === yesterday.getFullYear() &&
+        date.getMonth() === yesterday.getMonth() &&
+        date.getDate() === yesterday.getDate();
+
+    if (wasYesterday) return "Yesterday";
+
+    return date.toLocaleDateString([], {
+        month: "short",
+        day: "numeric",
+        year:
+            date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+    });
+}
+
+function mobileChatList(chats: Chat[] | undefined, query = "") {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+
+    return (
+        chats
+            ?.filter((chat) => chat.quickChat && !chat.gcPrototype)
+            .filter(
+                (chat) =>
+                    !normalizedQuery ||
+                    chatTitle(chat)
+                        .toLocaleLowerCase()
+                        .includes(normalizedQuery),
+            )
+            .sort((a, b) => {
+                if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+                return b.updatedAt.localeCompare(a.updatedAt);
+            }) ?? []
+    );
+}
+
+function MobileChatSearch({
+    value,
+    onChange,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+}) {
+    return (
+        <div className="mobile-chat-search flex h-11 items-center gap-2 rounded-md bg-foreground/[0.055] px-3 transition-colors focus-within:bg-foreground/[0.075] focus-within:ring-1 focus-within:ring-foreground/15">
+            <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+            <input
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                placeholder="Search chats"
+                aria-label="Search chats"
+                className="mobile-chat-search-input min-w-0 flex-1 !border-0 !bg-transparent !p-0 text-[16px] !shadow-none !ring-0 outline-none placeholder:text-foreground/55 focus:!border-0 focus:!ring-0"
+            />
+            {value && (
+                <button
+                    type="button"
+                    className="flex size-7 items-center justify-center rounded-full text-muted-foreground active:bg-foreground/10"
+                    onClick={() => onChange("")}
+                    aria-label="Clear chat search"
+                >
+                    <XIcon className="size-3.5" />
+                </button>
+            )}
+        </div>
+    );
+}
+
+const MobileChatRow = memo(function MobileChatRow({
+    chat,
+    active = false,
+    onOpen,
+    onManage,
+}: {
+    chat: Chat;
+    active?: boolean;
+    onOpen: () => void;
+    onManage: () => void;
+}) {
+    return (
+        <div
+            className={`flex min-h-[4.5rem] items-center rounded-md ${
+                active ? "bg-highlight text-highlight-foreground" : ""
+            }`}
+        >
+            <button
+                type="button"
+                className="flex min-h-[4.5rem] min-w-0 flex-1 items-center gap-3 rounded-md px-3 text-left active:bg-muted"
+                onClick={onOpen}
+                aria-current={active ? "page" : undefined}
+            >
+                {chat.pinned && (
+                    <PinIcon
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                        aria-label="Pinned"
+                    />
+                )}
+                <div className="min-w-0 flex-1">
+                    <div className={`truncate ${mobileType.rowTitle}`}>
+                        {chatTitle(chat)}
+                    </div>
+                    <div className={`mt-0.5 truncate ${mobileType.rowMeta}`}>
+                        {formatChatDate(chat.updatedAt)}
+                    </div>
+                </div>
+            </button>
+            <button
+                type="button"
+                className="mr-1 flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-muted active:text-foreground"
+                onClick={onManage}
+                aria-label={`Manage ${chatTitle(chat)}`}
+            >
+                <EllipsisVerticalIcon className="size-5" />
+            </button>
+        </div>
+    );
+});
+
+function MobileChatActionsSheet({
+    chat,
+    onClose,
+    onDeleted,
+}: {
+    chat: Chat | null;
+    onClose: () => void;
+    onDeleted: (chatId: string) => void;
+}) {
+    const renameChat = ChatAPI.useRenameChat();
+    const deleteChat = ChatAPI.useDeleteChat();
+    const togglePin = ChatAPI.useTogglePinChat();
+    const [title, setTitle] = useState("");
+    const [confirmDelete, setConfirmDelete] = useState(false);
+
+    useEffect(() => {
+        setTitle(chat ? chatTitle(chat) : "");
+        setConfirmDelete(false);
+    }, [chat]);
+
+    useEffect(() => {
+        if (!chat) return;
+
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") onClose();
+        };
+        window.addEventListener("keydown", closeOnEscape);
+        return () => window.removeEventListener("keydown", closeOnEscape);
+    }, [chat, onClose]);
+
+    if (!chat) return null;
+
+    const trimmedTitle = title.trim();
+    const titleChanged =
+        trimmedTitle.length > 0 && trimmedTitle !== chatTitle(chat);
+    const isPending =
+        renameChat.isPending || deleteChat.isPending || togglePin.isPending;
+
+    const saveTitle = async () => {
+        if (!titleChanged) return;
+        await renameChat.mutateAsync({
+            chatId: chat.id,
+            newTitle: trimmedTitle,
+        });
+        toast.success("Chat renamed");
+        onClose();
+    };
+
+    const handleDelete = async () => {
+        await deleteChat.mutateAsync({ chatId: chat.id });
+        toast.success("Chat deleted");
+        onDeleted(chat.id);
+        onClose();
+    };
+
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[80] flex items-end bg-black/35"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-chat-actions-title"
+            onClick={onClose}
+        >
+            <div
+                className="w-full rounded-t-xl bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-lg"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/30" />
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <h2
+                            id="mobile-chat-actions-title"
+                            className={mobileType.headerTitle}
+                        >
+                            Manage chat
+                        </h2>
+                        <div className={`mt-1 truncate ${mobileType.caption}`}>
+                            {chatTitle(chat)}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        className={mobileIconButton}
+                        onClick={onClose}
+                        aria-label="Close chat actions"
+                    >
+                        <XIcon className="size-5" />
+                    </button>
+                </div>
+
+                {confirmDelete ? (
+                    <div className="py-5">
+                        <div className="text-base font-medium">
+                            Delete this chat?
+                        </div>
+                        <p
+                            className={`mt-1 ${mobileType.body} text-muted-foreground`}
+                        >
+                            This permanently removes the conversation and its
+                            messages from this device.
+                        </p>
+                        <div className="mt-5 grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                className="h-11 rounded-md border font-medium active:bg-muted"
+                                onClick={() => setConfirmDelete(false)}
+                                disabled={isPending}
+                            >
+                                Keep chat
+                            </button>
+                            <button
+                                type="button"
+                                className="h-11 rounded-md bg-destructive font-medium text-destructive-foreground disabled:opacity-60"
+                                onClick={() => void handleDelete()}
+                                disabled={isPending}
+                            >
+                                {deleteChat.isPending
+                                    ? "Deleting..."
+                                    : "Delete chat"}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col gap-3 py-3">
+                        <label className="flex flex-col gap-1.5">
+                            <span className={mobileType.label}>Title</span>
+                            <div className="flex gap-2">
+                                <input
+                                    value={title}
+                                    onChange={(event) =>
+                                        setTitle(event.target.value)
+                                    }
+                                    onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                            event.preventDefault();
+                                            void saveTitle();
+                                        }
+                                    }}
+                                    maxLength={120}
+                                    className="h-11 min-w-0 flex-1 rounded-md border bg-background px-3 text-[16px] outline-none focus:ring-2 focus:ring-ring"
+                                />
+                                <button
+                                    type="button"
+                                    className="flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-[15px] font-semibold text-background disabled:opacity-50"
+                                    onClick={() => void saveTitle()}
+                                    disabled={!titleChanged || isPending}
+                                >
+                                    <PencilIcon className="size-4" />
+                                    Save
+                                </button>
+                            </div>
+                        </label>
+
+                        <button
+                            type="button"
+                            className="flex h-12 items-center gap-3 rounded-md px-3 text-left active:bg-muted"
+                            onClick={() =>
+                                void togglePin
+                                    .mutateAsync({
+                                        chatId: chat.id,
+                                        pinned: !chat.pinned,
+                                    })
+                                    .then(() => {
+                                        toast.success(
+                                            chat.pinned
+                                                ? "Chat unpinned"
+                                                : "Chat pinned",
+                                        );
+                                        onClose();
+                                    })
+                            }
+                            disabled={isPending}
+                        >
+                            {chat.pinned ? (
+                                <PinOffIcon className="size-5" />
+                            ) : (
+                                <PinIcon className="size-5" />
+                            )}
+                            <span className="font-medium">
+                                {chat.pinned ? "Unpin chat" : "Pin chat"}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            className="flex h-12 items-center gap-3 rounded-md px-3 text-left text-destructive active:bg-destructive/10"
+                            onClick={() => setConfirmDelete(true)}
+                            disabled={isPending}
+                        >
+                            <Trash2Icon className="size-5" />
+                            <span className="font-medium">Delete chat</span>
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>,
+        document.body,
+    );
 }
 
 function sortOpenRouterModels(modelConfigs: ModelConfig[]) {
@@ -219,19 +575,16 @@ function useStableMobileViewport() {
         };
 
         updateViewportState();
-        if (
-            document.activeElement instanceof HTMLInputElement ||
-            document.activeElement instanceof HTMLTextAreaElement
-        ) {
-            document.activeElement.blur();
-        }
         window.addEventListener("orientationchange", updateViewportState);
         window.visualViewport?.addEventListener("resize", updateViewportState);
         document.addEventListener("focusin", updateKeyboardState);
         document.addEventListener("focusout", updateKeyboardState);
 
         return () => {
-            window.removeEventListener("orientationchange", updateViewportState);
+            window.removeEventListener(
+                "orientationchange",
+                updateViewportState,
+            );
             window.visualViewport?.removeEventListener(
                 "resize",
                 updateViewportState,
@@ -252,12 +605,41 @@ function MobileModelBootstrap() {
     const { data: apiKeys } = AppMetadataAPI.useApiKeys();
     const modelConfigsQuery = ModelsAPI.useModelConfigs();
     const selectedQuickChatModel = ModelsAPI.useSelectedModelConfigQuickChat();
-    const updateQuickChatModel = MessageAPI.useUpdateSelectedModelConfigQuickChat();
+    const updateQuickChatModel =
+        MessageAPI.useUpdateSelectedModelConfigQuickChat();
+    const refreshOpenRouterModels = ModelsAPI.useRefreshOpenRouterModels();
+    const refreshAttemptedRef = useRef(false);
 
     const openRouterModels = useMemo(
         () => openRouterModelConfigs(modelConfigsQuery.data),
         [modelConfigsQuery.data],
     );
+
+    useEffect(() => {
+        if (!apiKeys?.openrouter) {
+            refreshAttemptedRef.current = false;
+            return;
+        }
+
+        if (
+            !modelConfigsQuery.isPending &&
+            openRouterModels.length === 0 &&
+            !refreshOpenRouterModels.isPending &&
+            !refreshAttemptedRef.current
+        ) {
+            refreshAttemptedRef.current = true;
+            refreshOpenRouterModels.mutate(undefined, {
+                onError: () => {
+                    refreshAttemptedRef.current = false;
+                },
+            });
+        }
+    }, [
+        apiKeys?.openrouter,
+        modelConfigsQuery.isPending,
+        openRouterModels.length,
+        refreshOpenRouterModels,
+    ]);
 
     useEffect(() => {
         if (
@@ -292,13 +674,17 @@ function MobileModelSelect({
 }) {
     const modelConfigsQuery = ModelsAPI.useModelConfigs();
     const selectedQuickChatModel = ModelsAPI.useSelectedModelConfigQuickChat();
-    const updateQuickChatModel = MessageAPI.useUpdateSelectedModelConfigQuickChat();
+    const updateQuickChatModel =
+        MessageAPI.useUpdateSelectedModelConfigQuickChat();
+    const savedChatModel = ModelConfigChatAPI.useSavedModelConfigChat(chatId);
+    const updateSavedChatModel =
+        ModelConfigChatAPI.useUpdateSavedModelConfigChat();
     const refreshOpenRouterModels = ModelsAPI.useRefreshOpenRouterModels();
-    const mobileChatModelConfigId =
-        AppMetadataAPI.useMobileChatModelConfigId(chatId);
-    const setMobileChatModelConfigId =
-        AppMetadataAPI.useSetMobileChatModelConfigId();
     const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const [refreshState, setRefreshState] = useState<
+        "idle" | "success" | "error"
+    >("idle");
+    const refreshResetTimer = useRef<number>();
 
     const openRouterModels = useMemo(
         () => openRouterModelConfigs(modelConfigsQuery.data),
@@ -307,12 +693,40 @@ function MobileModelSelect({
     const selectedModel =
         (chatId
             ? openRouterModels.find(
-                  (modelConfig) => modelConfig.id === mobileChatModelConfigId,
+                  (model) => model.id === savedChatModel.data?.[0],
               )
-            : undefined) ??
-        selectedQuickChatModel.data;
+            : undefined) ?? selectedQuickChatModel.data;
 
-    if (modelConfigsQuery.isPending) {
+    useEffect(
+        () => () => {
+            if (refreshResetTimer.current) {
+                window.clearTimeout(refreshResetTimer.current);
+            }
+        },
+        [],
+    );
+
+    const refreshModels = () => {
+        setRefreshState("idle");
+        refreshOpenRouterModels.mutate(undefined, {
+            onSuccess: () => {
+                setRefreshState("success");
+                refreshResetTimer.current = window.setTimeout(
+                    () => setRefreshState("idle"),
+                    2200,
+                );
+            },
+            onError: () => {
+                setRefreshState("error");
+                refreshResetTimer.current = window.setTimeout(
+                    () => setRefreshState("idle"),
+                    2600,
+                );
+            },
+        });
+    };
+
+    if (modelConfigsQuery.isPending && !selectedModel) {
         return (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2Icon className="size-3.5 animate-spin" />
@@ -321,24 +735,52 @@ function MobileModelSelect({
         );
     }
 
+    if (modelConfigsQuery.isError && !selectedModel) {
+        return (
+            <button
+                type="button"
+                className="flex h-11 w-full items-center gap-2 rounded-md border px-3 text-left text-[15px] text-muted-foreground active:bg-muted"
+                onClick={refreshModels}
+                disabled={refreshOpenRouterModels.isPending}
+            >
+                <RefreshCcwIcon
+                    className={`size-4 ${
+                        refreshOpenRouterModels.isPending ? "animate-spin" : ""
+                    }`}
+                />
+                Retry models
+            </button>
+        );
+    }
+
     return (
-        <div
-            className={
-                compact
-                    ? "min-w-0"
-                    : "flex flex-col gap-2"
-            }
-        >
+        <div className={compact ? "min-w-0" : "flex flex-col gap-2"}>
             {!compact && (
                 <div className="flex items-center justify-between">
                     <label className={mobileType.label}>Model</label>
                     <button
                         type="button"
                         className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                        onClick={() => refreshOpenRouterModels.mutate()}
+                        onClick={refreshModels}
+                        disabled={refreshOpenRouterModels.isPending}
+                        aria-live="polite"
                     >
-                        <RefreshCcwIcon className="size-3.5" />
-                        Refresh
+                        {refreshOpenRouterModels.isPending ? (
+                            <Loader2Icon className="size-3.5 animate-spin" />
+                        ) : refreshState === "success" ? (
+                            <CheckIcon className="size-3.5" />
+                        ) : refreshState === "error" ? (
+                            <XIcon className="size-3.5" />
+                        ) : (
+                            <RefreshCcwIcon className="size-3.5" />
+                        )}
+                        {refreshOpenRouterModels.isPending
+                            ? "Refreshing"
+                            : refreshState === "success"
+                              ? "Updated"
+                              : refreshState === "error"
+                                ? "Retry"
+                                : "Refresh"}
                     </button>
                 </div>
             )}
@@ -346,8 +788,8 @@ function MobileModelSelect({
                 type="button"
                 className={
                     compact
-                        ? "flex h-9 w-full min-w-0 items-center gap-2 rounded-md border bg-background px-2 text-left text-[13px] active:bg-muted"
-                        : "flex h-11 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-sm active:bg-muted"
+                        ? "flex h-11 w-full min-w-0 items-center gap-2 rounded-md border bg-background px-3 text-left text-[15px] active:bg-muted"
+                        : "flex h-11 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-[16px] active:bg-muted"
                 }
                 onClick={() => setIsPickerOpen(true)}
                 disabled={openRouterModels.length === 0}
@@ -355,9 +797,7 @@ function MobileModelSelect({
             >
                 {selectedModel && (
                     <ProviderLogo
-                        provider={getProviderName(
-                            selectedModel.modelId,
-                        )}
+                        provider={getProviderName(selectedModel.modelId)}
                         size="sm"
                     />
                 )}
@@ -374,9 +814,9 @@ function MobileModelSelect({
                     onClose={() => setIsPickerOpen(false)}
                     onSelect={(modelConfig) => {
                         if (chatId) {
-                            setMobileChatModelConfigId.mutate({
+                            updateSavedChatModel.mutate({
                                 chatId,
-                                modelConfigId: modelConfig.id,
+                                modelIds: [modelConfig.id],
                             });
                         } else {
                             updateQuickChatModel.mutate({ modelConfig });
@@ -400,11 +840,46 @@ function MobileModelPickerSheet({
     onClose: () => void;
     onSelect: (modelConfig: ModelConfig) => void;
 }) {
-    return (
-        <div className="fixed inset-0 z-[70] bg-background">
-            <div className="flex h-full flex-col mobile-safe-top">
-                <div className="flex h-14 items-center justify-between border-b px-4">
-                    <h2 className={mobileType.headerTitle}>Choose model</h2>
+    const [query, setQuery] = useState("");
+    const filteredModels = useMemo(() => {
+        const normalizedQuery = query.trim().toLocaleLowerCase();
+        if (!normalizedQuery) return models;
+
+        return models.filter((model) =>
+            `${model.displayName} ${model.modelId}`
+                .toLocaleLowerCase()
+                .includes(normalizedQuery),
+        );
+    }, [models, query]);
+
+    useEffect(() => {
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") onClose();
+        };
+        window.addEventListener("keydown", closeOnEscape);
+        return () => window.removeEventListener("keydown", closeOnEscape);
+    }, [onClose]);
+
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[70] bg-background"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-model-picker-title"
+        >
+            <div className="flex h-full min-h-0 flex-col mobile-safe-top">
+                <div className="flex h-14 shrink-0 items-center justify-between border-b px-4">
+                    <div className="min-w-0">
+                        <h2
+                            id="mobile-model-picker-title"
+                            className={mobileType.headerTitle}
+                        >
+                            Choose model
+                        </h2>
+                        <div className={mobileType.caption}>
+                            {models.length} OpenRouter models
+                        </div>
+                    </div>
                     <button
                         type="button"
                         className={mobileIconButton}
@@ -414,14 +889,27 @@ function MobileModelPickerSheet({
                         <XIcon className="size-5" />
                     </button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-3 py-2">
-                    {models.map((modelConfig) => {
+                <div className="shrink-0 border-b px-3 py-3">
+                    <label className="flex h-11 items-center gap-2 rounded-md border bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+                        <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+                        <input
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Search models"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-muted-foreground"
+                        />
+                    </label>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2">
+                    {filteredModels.map((modelConfig) => {
                         const selected = modelConfig.id === selectedModelId;
                         return (
                             <button
                                 key={modelConfig.id}
                                 type="button"
-                                className={`flex min-h-14 w-full items-center gap-3 rounded-lg px-3 py-2 text-left ${
+                                className={`mobile-model-row flex min-h-14 w-full items-center gap-3 rounded-md px-3 py-2 text-left ${
                                     selected
                                         ? "bg-highlight text-highlight-foreground"
                                         : "active:bg-muted"
@@ -434,7 +922,9 @@ function MobileModelPickerSheet({
                                     )}
                                     size="sm"
                                 />
-                                <span className={`min-w-0 flex-1 truncate ${mobileType.rowTitle}`}>
+                                <span
+                                    className={`min-w-0 flex-1 truncate ${mobileType.rowTitle}`}
+                                >
                                     {modelConfig.displayName}
                                 </span>
                                 {selected && (
@@ -443,9 +933,15 @@ function MobileModelPickerSheet({
                             </button>
                         );
                     })}
+                    {filteredModels.length === 0 && (
+                        <div className="flex min-h-40 items-center justify-center px-6 text-center text-sm text-muted-foreground">
+                            No models match “{query.trim()}”
+                        </div>
+                    )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }
 
@@ -465,10 +961,24 @@ function MobileSettingsPanel({
         apiKeys?.openrouter ?? "",
     );
     const [isSaving, setIsSaving] = useState(false);
+    const [connectionState, setConnectionState] = useState<
+        "idle" | "testing" | "success" | "error"
+    >("idle");
 
     useEffect(() => {
         setOpenRouterKey(apiKeys?.openrouter ?? "");
+        setConnectionState("idle");
     }, [apiKeys?.openrouter]);
+
+    const testOpenRouterConnection = useCallback(async () => {
+        const trimmedKey = openRouterKey.trim();
+        if (!trimmedKey) return;
+
+        setConnectionState("testing");
+        const connected =
+            await AppMetadataAPI.testOpenRouterConnection(trimmedKey);
+        setConnectionState(connected ? "success" : "error");
+    }, [openRouterKey]);
 
     const saveOpenRouterKey = useCallback(async () => {
         const trimmedKey = openRouterKey.trim();
@@ -551,7 +1061,7 @@ function MobileSettingsPanel({
                                 <button
                                     key={option.id}
                                     type="button"
-                                    className={`flex h-10 items-center justify-center gap-1.5 rounded-md border text-sm ${
+                                    className={`flex h-11 items-center justify-center gap-1.5 rounded-md border text-[15px] font-medium ${
                                         active
                                             ? "border-primary bg-primary text-background"
                                             : "bg-background active:bg-muted"
@@ -583,25 +1093,43 @@ function MobileSettingsPanel({
                     <input
                         id="mobile-openrouter-key"
                         value={openRouterKey}
-                        onChange={(event) =>
-                            setOpenRouterKey(event.target.value)
-                        }
+                        onChange={(event) => {
+                            setOpenRouterKey(event.target.value);
+                            setConnectionState("idle");
+                        }}
                         placeholder="sk-or-v1-..."
                         type="password"
                         autoCapitalize="none"
                         autoCorrect="off"
                         className="h-11 rounded-md border bg-background px-3 text-[16px] outline-none focus:ring-2 focus:ring-ring"
                     />
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {hasOpenRouterKey && (
-                            <CheckIcon className="size-3.5 text-green-600" />
+                    <button
+                        type="button"
+                        className="flex h-11 items-center justify-center gap-2 rounded-md border bg-background text-[15px] font-semibold active:bg-muted disabled:opacity-55"
+                        onClick={() => void testOpenRouterConnection()}
+                        disabled={
+                            !openRouterKey.trim() ||
+                            connectionState === "testing"
+                        }
+                        aria-live="polite"
+                    >
+                        {connectionState === "testing" ? (
+                            <Loader2Icon className="size-4 animate-spin" />
+                        ) : connectionState === "success" ? (
+                            <CheckIcon className="size-4" />
+                        ) : connectionState === "error" ? (
+                            <XIcon className="size-4" />
+                        ) : (
+                            <KeyRoundIcon className="size-4" />
                         )}
-                        <span>
-                            {hasOpenRouterKey
-                                ? "OpenRouter connected"
-                                : "Required for iOS chat"}
-                        </span>
-                    </div>
+                        {connectionState === "testing"
+                            ? "Testing connection"
+                            : connectionState === "success"
+                              ? "Connected"
+                              : connectionState === "error"
+                                ? "Connection failed"
+                                : "Test connection"}
+                    </button>
                 </section>
 
                 {hasOpenRouterKey && <MobileModelSelect />}
@@ -609,44 +1137,31 @@ function MobileSettingsPanel({
                 {hasOpenRouterKey && (
                     <section className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
                         <div className="min-w-0">
-                            <div className={`flex items-center gap-2 ${mobileType.label}`}>
+                            <div
+                                className={`flex items-center gap-2 ${mobileType.label}`}
+                            >
                                 <GlobeIcon className="size-4 text-muted-foreground" />
                                 Default web search
                             </div>
-                            <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                            <div className={`mt-1 ${mobileType.caption}`}>
                                 Use web search automatically in new chats.
                             </div>
                         </div>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={mobileWebSearch.enabled}
-                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                                mobileWebSearch.enabled
-                                    ? "bg-accent-800"
-                                    : "border border-accent-800/60 bg-transparent"
-                            }`}
-                            onClick={() =>
-                                void mobileWebSearch.setEnabled(
-                                    !mobileWebSearch.enabled,
-                                )
+                        <Switch
+                            checked={mobileWebSearch.enabled}
+                            onCheckedChange={(checked) =>
+                                void mobileWebSearch.setEnabled(checked)
                             }
                             disabled={mobileWebSearch.isPending}
-                        >
-                            <span
-                                className={`absolute top-1 size-5 rounded-full bg-background transition-transform ${
-                                    mobileWebSearch.enabled
-                                        ? "translate-x-6 bg-accent-25"
-                                        : "translate-x-1 bg-accent-800"
-                                }`}
-                            />
-                        </button>
+                            aria-label="Use web search automatically in new chats"
+                            className="data-[state=checked]:bg-accent-800 data-[state=unchecked]:bg-muted-foreground/35"
+                        />
                     </section>
                 )}
 
                 <button
                     type="button"
-                    className="mt-auto h-11 rounded-md bg-primary px-4 text-sm font-medium text-background disabled:cursor-not-allowed disabled:opacity-60"
+                    className="mt-auto h-12 rounded-md bg-primary px-4 text-[16px] font-semibold text-background disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => void saveOpenRouterKey()}
                     disabled={isSaving}
                 >
@@ -670,116 +1185,85 @@ function MobileChatListSheet({
 }) {
     const navigate = useNavigate();
     const chatsQuery = useQuery(ChatAPI.chatQueries.list());
-    const createChat = ChatAPI.useCreateNewChat();
-    const deleteChat = ChatAPI.useDeleteChat();
+    const openNewChat = ChatAPI.useGetOrCreateNewQuickChat();
+    const [query, setQuery] = useState("");
+    const deferredQuery = useDeferredValue(query);
+    const [managedChat, setManagedChat] = useState<Chat | null>(null);
 
     const mobileChats = useMemo(
-        () =>
-            chatsQuery.data
-                ?.filter((chat) => chat.quickChat && !chat.gcPrototype)
-                .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) ?? [],
-        [chatsQuery.data],
+        () => mobileChatList(chatsQuery.data, deferredQuery),
+        [chatsQuery.data, deferredQuery],
     );
 
     const createNewChat = useCallback(async () => {
-        const chatId = await createChat.mutateAsync({
-            projectId: "quick-chat",
-        });
-        navigate(`/chat/${chatId}`);
+        await openNewChat.mutateAsync();
         onClose();
-    }, [createChat, navigate, onClose]);
+    }, [onClose, openNewChat]);
 
     if (!open) return null;
 
     return (
         <div className="fixed inset-0 z-40 bg-background">
             <div className="flex h-full flex-col mobile-safe-top">
-                <div className="flex items-center justify-between border-b px-4 py-3">
-                    <h2 className={mobileType.headerTitle}>Chats</h2>
-                    <div className="flex items-center gap-1">
-                        <button
-                            type="button"
-                            className={mobileIconButton}
-                            onClick={() => {
-                                onClose();
-                                onOpenSettings();
-                            }}
-                            aria-label="Open settings"
-                        >
-                            <SettingsIcon className="size-5" />
-                        </button>
-                        <button
-                            type="button"
-                            className={mobileIconButton}
-                            onClick={onClose}
-                            aria-label="Close chats"
-                        >
-                            <XIcon className="size-5" />
-                        </button>
-                    </div>
-                </div>
-
-                <div className="relative flex-1 overflow-y-auto px-4 py-3">
-                    {mobileChats.map((chat) => (
-                        <button
-                            key={chat.id}
-                            type="button"
-                            className={`group flex min-h-16 w-full items-center gap-3 rounded-md px-3 text-left ${
-                                chat.id === currentChatId
-                                    ? "bg-highlight text-highlight-foreground"
-                                    : "hover:bg-muted"
-                            }`}
-                            onClick={() => {
-                                navigate(`/chat/${chat.id}`);
-                                onClose();
-                            }}
-                        >
-                            <div className="min-w-0 flex-1">
-                                <div className={`truncate ${mobileType.rowTitle}`}>
-                                    {chatTitle(chat)}
-                                </div>
-                                <div className={`mt-0.5 truncate ${mobileType.rowMeta}`}>
-                                    {new Date(
-                                        chat.updatedAt,
-                                    ).toLocaleDateString()}
-                                </div>
+                <header className="shrink-0 border-b px-4 pb-3">
+                    <div className="flex min-h-14 items-center justify-between">
+                        <div>
+                            <h2 className={mobileType.headerTitle}>Chats</h2>
+                            <div className={mobileType.caption}>
+                                {mobileChatList(chatsQuery.data).length} chats
                             </div>
-                            <span
-                                role="button"
-                                tabIndex={0}
-                                className="flex size-8 items-center justify-center rounded-full text-muted-foreground opacity-80 hover:bg-background hover:text-destructive"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    void deleteChat
-                                        .mutateAsync({ chatId: chat.id })
-                                        .then(() => {
-                                            if (chat.id === currentChatId) {
-                                                navigate("/");
-                                            }
-                                        });
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                className={mobileIconButton}
+                                onClick={() => {
+                                    onClose();
+                                    onOpenSettings();
                                 }}
-                                onKeyDown={(event) => {
-                                    if (
-                                        event.key === "Enter" ||
-                                        event.key === " "
-                                    ) {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                        void deleteChat.mutateAsync({
-                                            chatId: chat.id,
-                                        });
-                                    }
-                                }}
-                                aria-label={`Delete ${chatTitle(chat)}`}
+                                aria-label="Open settings"
                             >
-                                <Trash2Icon className="size-4" />
-                            </span>
-                        </button>
-                    ))}
+                                <SettingsIcon className="size-5" />
+                            </button>
+                            <button
+                                type="button"
+                                className={mobileIconButton}
+                                onClick={onClose}
+                                aria-label="Close chats"
+                            >
+                                <XIcon className="size-5" />
+                            </button>
+                        </div>
+                    </div>
+                    <MobileChatSearch value={query} onChange={setQuery} />
+                </header>
+
+                <div className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3">
+                    <div className="flex flex-col gap-1 pb-24">
+                        {mobileChats.map((chat) => (
+                            <MobileChatRow
+                                key={chat.id}
+                                chat={chat}
+                                active={chat.id === currentChatId}
+                                onOpen={() => {
+                                    navigate(`/chat/${chat.id}`);
+                                    onClose();
+                                }}
+                                onManage={() => setManagedChat(chat)}
+                            />
+                        ))}
+                    </div>
 
                     {mobileChats.length === 0 && (
-                        <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                            No chats yet
+                        <div className="flex min-h-56 flex-col items-center justify-center px-8 text-center">
+                            <div className="text-base font-medium">
+                                {query ? "No matching chats" : "No chats yet"}
+                            </div>
+                            <div className="mt-1 text-sm leading-6 text-muted-foreground">
+                                {query
+                                    ? "Try a different title."
+                                    : "Start a conversation and Chorus will keep it here."}
+                            </div>
                         </div>
                     )}
 
@@ -793,16 +1277,28 @@ function MobileChatListSheet({
                     </button>
                 </div>
             </div>
+            <MobileChatActionsSheet
+                chat={managedChat}
+                onClose={() => setManagedChat(null)}
+                onDeleted={(chatId) => {
+                    if (chatId === currentChatId) {
+                        navigate("/");
+                        onClose();
+                    }
+                }}
+            />
         </div>
     );
 }
 
 function MobileHeader({
     chat,
+    onBack,
     onOpenChats,
     onNewChat,
 }: {
     chat?: Chat;
+    onBack?: () => void;
     onOpenChats: () => void;
     onNewChat: () => void;
 }) {
@@ -810,15 +1306,19 @@ function MobileHeader({
 
     return (
         <header className="mobile-header mobile-safe-top border-b bg-background/95 backdrop-blur-xl">
-            <div className="flex min-h-[5.75rem] flex-col justify-center gap-2 px-4 py-2">
-                <div className="flex h-10 items-center gap-2">
+            <div className="flex min-h-28 flex-col justify-center gap-2 px-3 py-2">
+                <div className="flex h-11 items-center gap-2">
                     <button
                         type="button"
                         className={mobileIconButton}
-                        onClick={onOpenChats}
-                        aria-label="Open chats"
+                        onClick={onBack ?? onOpenChats}
+                        aria-label={onBack ? "Back to chats" : "Open chats"}
                     >
-                        <MenuIcon className="size-5" />
+                        {onBack ? (
+                            <ArrowLeftIcon className="size-5" />
+                        ) : (
+                            <MenuIcon className="size-5" />
+                        )}
                     </button>
                     <div className="min-w-0 flex-1">
                         <div className={`truncate ${mobileType.headerTitle}`}>
@@ -855,7 +1355,7 @@ function MobileHeader({
                         <PlusIcon className="size-5" />
                     </button>
                 </div>
-                <div className="px-0.5">
+                <div className="pl-12 pr-1">
                     <MobileModelSelect compact chatId={chat?.id} />
                 </div>
             </div>
@@ -863,11 +1363,13 @@ function MobileHeader({
     );
 }
 
-function MobileAssistantMessage({ message }: { message: Message }) {
-    const modelConfigsQuery = ModelsAPI.useModelConfigs();
-    const modelConfig = modelConfigsQuery.data?.find(
-        (config) => config.id === message.model,
-    );
+function MobileAssistantMessage({
+    message,
+    modelConfig,
+}: {
+    message: Message;
+    modelConfig?: ModelConfig;
+}) {
     const partsWithContent = message.parts.filter(
         (part) => part.content.trim().length > 0,
     );
@@ -878,8 +1380,10 @@ function MobileAssistantMessage({ message }: { message: Message }) {
 
     return (
         <div className="flex w-full justify-start">
-            <div className="min-w-0 max-w-[94%] rounded-lg border bg-background px-4 py-3 shadow-sm">
-                <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="min-w-0 max-w-full px-1 py-2">
+                <div
+                    className={`mb-2 flex items-center gap-2 ${mobileType.caption}`}
+                >
                     {modelConfig && (
                         <ProviderLogo
                             provider={getProviderName(modelConfig.modelId)}
@@ -895,7 +1399,7 @@ function MobileAssistantMessage({ message }: { message: Message }) {
                 </div>
 
                 {partsWithContent.length > 0 ? (
-                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <div className="mobile-message-copy prose max-w-none dark:prose-invert">
                         {partsWithContent.map((part) => (
                             <MessageMarkdown
                                 key={`${message.id}-${part.level}`}
@@ -904,7 +1408,9 @@ function MobileAssistantMessage({ message }: { message: Message }) {
                         ))}
                     </div>
                 ) : message.state === "streaming" ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div
+                        className={`flex items-center gap-2 ${mobileType.body} text-muted-foreground`}
+                    >
                         <RetroSpinner />
                         Thinking
                     </div>
@@ -927,8 +1433,10 @@ function MobileUserMessage({ message }: { message: Message }) {
 
     return (
         <div className="flex w-full justify-end">
-            <div className="max-w-[88%] rounded-xl bg-highlight px-4 py-2.5 text-highlight-foreground">
-                <div className="whitespace-pre-wrap break-words text-[15px] leading-6">
+            <div className="max-w-[88%] rounded-2xl bg-highlight px-4 py-2.5 text-highlight-foreground">
+                <div
+                    className={`whitespace-pre-wrap break-words ${mobileType.body}`}
+                >
                     {message.text}
                 </div>
                 {attachments.length > 0 && (
@@ -944,8 +1452,10 @@ function MobileUserMessage({ message }: { message: Message }) {
 
 function MobileMessageSet({
     messageSet,
+    modelConfigsById,
 }: {
     messageSet: MessageSetDetail;
+    modelConfigsById: Map<string, ModelConfig>;
 }) {
     if (messageSet.selectedBlockType === "user") {
         return messageSet.userBlock.message ? (
@@ -954,30 +1464,56 @@ function MobileMessageSet({
     }
 
     const selectedToolsMessage =
-        messageSet.toolsBlock.chatMessages.find((message) => message.selected) ??
-        messageSet.toolsBlock.chatMessages[0];
+        messageSet.toolsBlock.chatMessages.find(
+            (message) => message.selected,
+        ) ?? messageSet.toolsBlock.chatMessages[0];
     const selectedChatMessage = messageSet.chatBlock.message;
     const message = selectedToolsMessage ?? selectedChatMessage;
 
     if (!message) return null;
 
-    return <MobileAssistantMessage message={message} />;
+    return (
+        <MobileAssistantMessage
+            message={message}
+            modelConfig={modelConfigsById.get(message.model)}
+        />
+    );
 }
 
-function MobileChatRoute({
-    onOpenChats,
-}: {
-    onOpenChats: () => void;
-}) {
+function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     const { chatId } = useParams();
     const navigate = useNavigate();
     const { data: apiKeys } = AppMetadataAPI.useApiKeys();
     const chatQuery = ChatAPI.useChat(chatId ?? "");
-    const createChat = ChatAPI.useCreateNewChat();
+    const createNewChatMutation = ChatAPI.useCreateNewChat();
+    const discardDisposableChat = ChatAPI.useDiscardDisposableQuickChat();
     const messageSetsQuery = MessageAPI.useMessageSets(chatId ?? "");
+    const modelConfigsQuery = ModelsAPI.useModelConfigs();
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const eyeRef = useRef<MouseTrackingEyeRef>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const [isLoadSlow, setIsLoadSlow] = useState(false);
+
+    const isLoading =
+        chatQuery.isPending || messageSetsQuery.isPending || !chatId;
+    const modelConfigsById = useMemo(
+        () =>
+            new Map(
+                (modelConfigsQuery.data ?? []).map((config) => [
+                    config.id,
+                    config,
+                ]),
+            ),
+        [modelConfigsQuery.data],
+    );
+
+    useEffect(() => {
+        setIsLoadSlow(false);
+        if (!isLoading) return;
+
+        const timeout = window.setTimeout(() => setIsLoadSlow(true), 3000);
+        return () => window.clearTimeout(timeout);
+    }, [chatId, isLoading]);
 
     const scrollToLatestMessageSet = useCallback(() => {
         requestAnimationFrame(() => {
@@ -989,46 +1525,116 @@ function MobileChatRoute({
     }, []);
 
     useEffect(() => {
-        scrollToLatestMessageSet();
-    }, [messageSetsQuery.data, scrollToLatestMessageSet]);
+        requestAnimationFrame(() => {
+            scrollRef.current?.scrollIntoView({
+                behavior: "auto",
+                block: "end",
+            });
+        });
+    }, [messageSetsQuery.data]);
 
     const createNewChat = useCallback(async () => {
-        const nextChatId = await createChat.mutateAsync({
+        if (chatId) {
+            await discardDisposableChat.mutateAsync({ chatId });
+        }
+        const newChatId = await createNewChatMutation.mutateAsync({
             projectId: "quick-chat",
         });
-        navigate(`/chat/${nextChatId}`);
-    }, [createChat, navigate]);
+        navigate(`/chat/${newChatId}`);
+    }, [chatId, createNewChatMutation, discardDisposableChat, navigate]);
+
+    const leaveChat = useCallback(async () => {
+        if (chatId) {
+            await discardDisposableChat.mutateAsync({ chatId });
+        }
+        navigate("/");
+    }, [chatId, discardDisposableChat, navigate]);
+
+    const retryChat = useCallback(() => {
+        void Promise.all([
+            chatQuery.refetch(),
+            messageSetsQuery.refetch(),
+            modelConfigsQuery.refetch(),
+        ]);
+    }, [chatQuery, messageSetsQuery, modelConfigsQuery]);
 
     if (!apiKeys?.openrouter) {
         return <MobileSettingsPanel showClose={false} />;
     }
 
-    if (chatQuery.isPending || messageSetsQuery.isPending || !chatId) {
+    if (isLoading) {
         return (
-            <div className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">
-                <RetroSpinner />
+            <div className="mobile-app-shell flex h-full flex-col bg-background">
+                <MobileHeader
+                    chat={chatQuery.data}
+                    onBack={() => void leaveChat()}
+                    onOpenChats={onOpenChats}
+                    onNewChat={() => void createNewChat()}
+                />
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted-foreground">
+                    <RetroSpinner />
+                    <div>
+                        {isLoadSlow
+                            ? "This chat is taking longer than expected."
+                            : "Loading chat..."}
+                    </div>
+                    {isLoadSlow && (
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                className="h-11 rounded-md bg-primary px-4 font-semibold text-background"
+                                onClick={retryChat}
+                            >
+                                Retry
+                            </button>
+                            <button
+                                type="button"
+                                className="h-11 rounded-md border bg-background px-4 font-medium text-foreground active:bg-muted"
+                                onClick={() => void leaveChat()}
+                            >
+                                Back to chats
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
         );
     }
 
-    if (chatQuery.error) {
+    if (chatQuery.error || messageSetsQuery.error) {
         return (
             <div className="flex h-full flex-col bg-background">
                 <MobileHeader
+                    chat={chatQuery.data}
+                    onBack={() => void leaveChat()}
                     onOpenChats={onOpenChats}
                     onNewChat={() => void createNewChat()}
                 />
                 <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
-                    <div className="text-sm text-muted-foreground">
-                        Chat not found
+                    <div>
+                        <div className="text-base font-medium">
+                            Could not open this chat
+                        </div>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                            Your chat list is still available.
+                        </div>
                     </div>
-                    <button
-                        type="button"
-                        className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-background"
-                        onClick={() => void createNewChat()}
-                    >
-                        New chat
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            className="h-11 rounded-md bg-primary px-4 text-[15px] font-semibold text-background"
+                            onClick={retryChat}
+                        >
+                            Retry
+                        </button>
+                        <button
+                            type="button"
+                            className="h-11 rounded-md border bg-background px-4 text-[15px] font-medium active:bg-muted"
+                            onClick={() => void leaveChat()}
+                        >
+                            Back to chats
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -1042,27 +1648,33 @@ function MobileChatRoute({
         <div className="mobile-app-shell flex h-full flex-col bg-background">
             <MobileHeader
                 chat={chatQuery.data}
+                onBack={() => void leaveChat()}
                 onOpenChats={onOpenChats}
                 onNewChat={() => void createNewChat()}
             />
 
-            <main className="mobile-chat-scroll flex-1 overflow-y-auto px-4 pt-4">
+            <main className="mobile-chat-scroll flex-1 overflow-y-auto overscroll-contain px-4 pt-4">
                 {messageSets.length === 0 ? (
                     <div className="flex h-full min-h-[45dvh] flex-col items-center justify-center px-6 text-center">
-                        <div className="font-geist-mono text-[11px] uppercase text-muted-foreground">
-                            Chorus
-                        </div>
-                        <h1 className="mt-2 text-xl font-medium">
-                            What can Chorus do for you?
-                        </h1>
+                        <div className={mobileType.screenTitle}>Chorus</div>
+                        <p
+                            className={`mt-2 ${mobileType.body} text-muted-foreground`}
+                        >
+                            What can I help you with?
+                        </p>
                     </div>
                 ) : (
-                    <div className="mx-auto flex w-full max-w-[42rem] flex-col gap-4 pb-4">
+                    <div className="flex flex-col gap-5 pb-4">
                         {messageSets.map((messageSet) => (
-                            <MobileMessageSet
+                            <div
+                                className="mobile-message-set"
                                 key={messageSet.id}
-                                messageSet={messageSet}
-                            />
+                            >
+                                <MobileMessageSet
+                                    messageSet={messageSet}
+                                    modelConfigsById={modelConfigsById}
+                                />
+                            </div>
                         ))}
                     </div>
                 )}
@@ -1088,22 +1700,23 @@ function MobileHome() {
     const navigate = useNavigate();
     const { data: apiKeys } = AppMetadataAPI.useApiKeys();
     const chatsQuery = useQuery(ChatAPI.chatQueries.list());
-    const createChat = ChatAPI.useCreateNewChat();
+    const openNewChat = ChatAPI.useGetOrCreateNewQuickChat();
+    const [query, setQuery] = useState("");
+    const deferredQuery = useDeferredValue(query);
+    const [managedChat, setManagedChat] = useState<Chat | null>(null);
 
     const mobileChats = useMemo(
-        () =>
-            chatsQuery.data
-                ?.filter((chat) => chat.quickChat && !chat.gcPrototype)
-                .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) ?? [],
+        () => mobileChatList(chatsQuery.data, deferredQuery),
+        [chatsQuery.data, deferredQuery],
+    );
+    const totalChats = useMemo(
+        () => mobileChatList(chatsQuery.data).length,
         [chatsQuery.data],
     );
 
     const createNewChat = useCallback(async () => {
-        const chatId = await createChat.mutateAsync({
-            projectId: "quick-chat",
-        });
-        navigate(`/chat/${chatId}`);
-    }, [createChat, navigate]);
+        await openNewChat.mutateAsync();
+    }, [openNewChat]);
 
     if (!apiKeys?.openrouter) {
         return <MobileSettingsPanel showClose={false} />;
@@ -1111,57 +1724,69 @@ function MobileHome() {
 
     return (
         <div className="flex h-full flex-col bg-background mobile-safe-top">
-            <header className="flex min-h-16 items-center justify-between border-b px-5">
-                <div>
-                    <h1 className={mobileType.screenTitle}>Chats</h1>
-                    <div className={`mt-0.5 ${mobileType.rowMeta}`}>
-                        {mobileChats.length === 1
-                            ? "1 conversation"
-                            : `${mobileChats.length} conversations`}
+            <header className="shrink-0 border-b px-4 pb-3">
+                <div className="flex min-h-24 items-center justify-between">
+                    <div>
+                        <h1 className={mobileType.appTitle}>Chorus</h1>
+                        <div className={`mt-0.5 ${mobileType.rowMeta}`}>
+                            {totalChats === 1
+                                ? "1 chat"
+                                : `${totalChats} chats`}
+                        </div>
                     </div>
+                    <button
+                        type="button"
+                        className={mobileIconButton}
+                        onClick={() => navigate("/settings")}
+                        aria-label="Open settings"
+                    >
+                        <SettingsIcon className="size-5" />
+                    </button>
                 </div>
-                <button
-                    type="button"
-                    className={mobileIconButton}
-                    onClick={() => navigate("/settings")}
-                    aria-label="Open settings"
-                >
-                    <SettingsIcon className="size-5" />
-                </button>
+                <MobileChatSearch value={query} onChange={setQuery} />
             </header>
 
-            <main className="relative flex-1 overflow-y-auto px-4 py-3">
+            <main className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3">
                 {chatsQuery.isPending ? (
-                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                        <RetroSpinner />
+                    <div className="flex flex-col gap-2 px-3 py-2">
+                        {[0, 1, 2, 3, 4].map((index) => (
+                            <div
+                                key={index}
+                                className="h-16 animate-pulse rounded-md bg-muted/60"
+                            />
+                        ))}
                     </div>
                 ) : mobileChats.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-                        <h2 className="text-lg font-medium">No chats yet</h2>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                            Start a chat and Chorus will keep it here.
+                        <h2 className={mobileType.screenTitle}>
+                            {query ? "No matching chats" : "No chats yet"}
+                        </h2>
+                        <p
+                            className={`mt-2 ${mobileType.body} text-muted-foreground`}
+                        >
+                            {query
+                                ? "Try another title or clear the search."
+                                : "Start a conversation and Chorus will keep it here."}
                         </p>
+                        {query && (
+                            <button
+                                type="button"
+                                className="mt-4 rounded-md border px-4 py-2 text-sm font-medium active:bg-muted"
+                                onClick={() => setQuery("")}
+                            >
+                                Clear search
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <div className="flex flex-col gap-1 pb-24">
                         {mobileChats.map((chat) => (
-                            <button
+                            <MobileChatRow
                                 key={chat.id}
-                                type="button"
-                                className="flex min-h-16 w-full items-center rounded-lg px-3 text-left active:bg-muted"
-                                onClick={() => navigate(`/chat/${chat.id}`)}
-                            >
-                                <div className="min-w-0 flex-1">
-                                    <div className={`truncate ${mobileType.rowTitle}`}>
-                                        {chatTitle(chat)}
-                                    </div>
-                                    <div className={`mt-0.5 truncate ${mobileType.rowMeta}`}>
-                                        {new Date(
-                                            chat.updatedAt,
-                                        ).toLocaleDateString()}
-                                    </div>
-                                </div>
-                            </button>
+                                chat={chat}
+                                onOpen={() => navigate(`/chat/${chat.id}`)}
+                                onManage={() => setManagedChat(chat)}
+                            />
                         ))}
                     </div>
                 )}
@@ -1175,6 +1800,11 @@ function MobileHome() {
                     <PlusIcon className="size-6" />
                 </button>
             </main>
+            <MobileChatActionsSheet
+                chat={managedChat}
+                onClose={() => setManagedChat(null)}
+                onDeleted={() => undefined}
+            />
         </div>
     );
 }
@@ -1226,8 +1856,37 @@ export default function MobileApp() {
 
             <Toaster
                 theme={toasterTheme}
-                position="bottom-center"
-                closeButton
+                position="top-center"
+                duration={2600}
+                gap={8}
+                visibleToasts={2}
+                mobileOffset={{
+                    top: "calc(var(--mobile-safe-area-top, env(safe-area-inset-top)) + 8px)",
+                    left: "12px",
+                    right: "12px",
+                }}
+                swipeDirections={["top", "right"]}
+                icons={{
+                    success: <CircleCheckIcon className="size-5" />,
+                    error: <CircleXIcon className="size-5" />,
+                    info: <InfoIcon className="size-5" />,
+                    loading: <Loader2Icon className="size-5 animate-spin" />,
+                }}
+                toastOptions={{
+                    unstyled: true,
+                    classNames: {
+                        toast: "mobile-ios-toast pointer-events-auto flex w-[calc(100vw-24px)] max-w-[28rem] items-start gap-3 rounded-lg border border-background/10 bg-foreground/95 px-4 py-3 text-background shadow-lg backdrop-blur-xl",
+                        title: "min-w-0 flex-1 text-[15px] font-semibold leading-5",
+                        description:
+                            "mt-0.5 min-w-0 text-[13px] leading-[18px] text-background/75",
+                        content: "min-w-0 flex-1",
+                        icon: "mt-0.5 shrink-0",
+                        actionButton:
+                            "rounded-md bg-background px-3 py-1.5 text-[13px] font-semibold text-foreground",
+                        cancelButton:
+                            "rounded-md bg-background/15 px-3 py-1.5 text-[13px] font-semibold text-background",
+                    },
+                }}
             />
         </div>
     );

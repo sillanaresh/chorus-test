@@ -130,11 +130,59 @@ body.chorus-mobile-root {
 
 .mobile-app {
     --mobile-header-height: calc(
-        var(--mobile-safe-area-top, env(safe-area-inset-top)) + 6.25rem
+        var(--mobile-safe-area-top, env(safe-area-inset-top)) + 7rem
     );
     height: 100%;
     min-height: 100%;
     background: hsl(var(--background));
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Helvetica Neue", sans-serif;
+    font-size: 16px;
+    line-height: 1.4;
+    letter-spacing: 0;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+.mobile-app button,
+.mobile-app input,
+.mobile-app textarea,
+.mobile-app select {
+    font-family: inherit;
+    letter-spacing: 0;
+}
+
+.mobile-chat-search-input {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    margin: 0;
+    padding: 0 !important;
+}
+
+.mobile-chat-search-input:focus {
+    background-color: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    outline: none;
+}
+
+.mobile-model-row,
+.mobile-message-set {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 64px;
+}
+
+.mobile-message-copy {
+    font-size: 17px;
+    line-height: 1.5;
+}
+
+.mobile-message-copy :where(p, li) {
+    font-size: 17px;
+    line-height: 1.5;
 }
 
 .mobile-app-shell {
@@ -150,7 +198,8 @@ body.chorus-mobile-root {
     justify-content: center;
     gap: 0.75rem;
     padding: calc(var(--mobile-safe-area-top, env(safe-area-inset-top)) + 2rem)
-        1.5rem calc(var(--mobile-safe-area-bottom, env(safe-area-inset-bottom)) + 2rem);
+        1.5rem
+        calc(var(--mobile-safe-area-bottom, env(safe-area-inset-bottom)) + 2rem);
     background: hsl(var(--background));
     color: hsl(var(--foreground));
     text-align: center;

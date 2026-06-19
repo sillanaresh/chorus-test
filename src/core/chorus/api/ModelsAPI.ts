@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Models from "../Models";
 import { db } from "../DB";
 import { ModelConfig } from "../Models";
-import { getApiKeys } from "./AppMetadataAPI";
 
 // all
 // --> list models
@@ -71,9 +70,19 @@ type ModelConfigDBRow = {
     completion_price_per_token: number | null;
 };
 
-// Track whether we've attempted to refresh OpenRouter models within
-// the current session, and store the promise if a download is in progress.
 let openRouterDownloadPromise: Promise<number> | null = null;
+
+function refreshOpenRouterModels() {
+    if (!openRouterDownloadPromise) {
+        openRouterDownloadPromise = Models.downloadOpenRouterModels(db).finally(
+            () => {
+                openRouterDownloadPromise = null;
+            },
+        );
+    }
+
+    return openRouterDownloadPromise;
+}
 
 function readModel(row: ModelDBRow): Models.Model {
     return {
@@ -110,21 +119,6 @@ function readModelConfig(row: ModelConfigDBRow): ModelConfig {
 }
 
 export async function fetchModelConfigs() {
-    // Fetch OpenRouter models if we haven't already and the user has an OpenRouter API key.
-    const apiKeys = await getApiKeys();
-    if (apiKeys.openrouter) {
-        // If a download is already in progress, wait for it to complete.
-        // Otherwise, start a new download and store the promise.
-        if (openRouterDownloadPromise) {
-            await openRouterDownloadPromise;
-        } else {
-            openRouterDownloadPromise = Models.downloadOpenRouterModels(db);
-            await openRouterDownloadPromise;
-            // Keep the promise stored so subsequent calls know it completed
-            // (we don't clear it to prevent re-downloads within the session)
-        }
-    }
-
     return (
         await db.select<ModelConfigDBRow[]>(
             `SELECT model_configs.id, model_configs.display_name, model_configs.author,
@@ -314,13 +308,16 @@ export function useRefreshOpenRouterModels() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationKey: ["refreshOpenRouterModels"] as const,
-        mutationFn: async () => {
-            await Models.downloadOpenRouterModels(db);
-        },
+        mutationFn: refreshOpenRouterModels,
         onSuccess: async () => {
-            await queryClient.invalidateQueries(
-                modelConfigQueries.listConfigs(),
-            );
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: modelConfigKeys.all(),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: modelKeys.all(),
+                }),
+            ]);
         },
     });
 }

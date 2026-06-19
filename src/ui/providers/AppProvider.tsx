@@ -31,17 +31,25 @@ export const AppProvider: React.FC<{
     }, [forceQuickChatWindow]);
 
     useEffect(() => {
+        if (isMobileApp) {
+            setZoomLevelState(100);
+            document.body.style.zoom = "100%";
+            return () => {
+                document.body.style.removeProperty("zoom");
+            };
+        }
+
         if (savedZoomLevel !== undefined) {
             setZoomLevelState(savedZoomLevel);
             if (!isQuickChatWindow) {
                 document.body.style.zoom = `${savedZoomLevel}%`;
             }
         }
-    }, [savedZoomLevel, isQuickChatWindow]);
+    }, [isMobileApp, savedZoomLevel, isQuickChatWindow]);
 
     const setZoomLevel = (level: number) => {
         setZoomLevelState(level);
-        if (!isQuickChatWindow) {
+        if (!isMobileApp && !isQuickChatWindow) {
             document.body.style.zoom = `${level}%`;
         }
         setZoomLevelMutation.mutate(level);
