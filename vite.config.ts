@@ -34,6 +34,7 @@ const mobileBuildPlugin = {
         const mobilePublicAssets = [
             "fonts/Geist-VariableFont_wght.ttf",
             "fonts/GeistMono-VariableFont_wght.ttf",
+            "icon.png",
             "openrouter_dark.svg",
         ];
 

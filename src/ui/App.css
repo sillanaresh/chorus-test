@@ -122,6 +122,7 @@ html.chorus-mobile-root #root {
     width: 100%;
     height: 100%;
     overflow: hidden;
+    overflow-x: clip;
 }
 
 body.chorus-mobile-root {
@@ -166,6 +167,29 @@ body.chorus-mobile-root {
     word-spacing: inherit;
 }
 
+.mobile-app :where(input, textarea, select) {
+    font-size: 1rem;
+}
+
+.mobile-chorus-markdown .prose,
+.mobile-chorus-markdown.prose {
+    font-family: inherit;
+    font-size: 1rem;
+    line-height: 1.5rem;
+    letter-spacing: 0;
+    word-spacing: normal;
+}
+
+.mobile-chorus-markdown .prose > :first-child,
+.mobile-chorus-markdown.prose > :first-child {
+    margin-top: 0;
+}
+
+.mobile-chorus-markdown .prose > :last-child,
+.mobile-chorus-markdown.prose > :last-child {
+    margin-bottom: 0;
+}
+
 .mobile-chat-search-input {
     appearance: none;
     -webkit-appearance: none;
@@ -185,7 +209,7 @@ body.chorus-mobile-root {
 
 .mobile-chat-row,
 .mobile-model-row,
-.mobile-message-set {
+.mobile-message-set:not(:has(textarea)) {
     content-visibility: auto;
     contain-intrinsic-size: auto 64px;
 }

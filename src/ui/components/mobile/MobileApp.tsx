@@ -22,6 +22,7 @@ import {
     CircleXIcon,
     CheckIcon,
     ChevronDownIcon,
+    CopyIcon,
     EllipsisVerticalIcon,
     GlobeIcon,
     InfoIcon,
@@ -37,6 +38,7 @@ import {
     RefreshCcwIcon,
     SearchIcon,
     SettingsIcon,
+    StopCircleIcon,
     SunIcon,
     Trash2Icon,
     XIcon,
@@ -573,16 +575,32 @@ function useStableMobileViewport() {
                 hasTextInputFocused,
             );
         };
+        const restoreViewportOrigin = () => {
+            window.scrollTo({ left: 0, top: 0, behavior: "auto" });
+            document.documentElement.scrollLeft = 0;
+            document.body.scrollLeft = 0;
+        };
         const updateViewportState = () => {
             updateSafeAreas();
             updateKeyboardState();
+        };
+        const handleFocusOut = () => {
+            window.setTimeout(() => {
+                updateKeyboardState();
+                const activeElement = document.activeElement;
+                const hasTextInputFocused =
+                    activeElement instanceof HTMLInputElement ||
+                    activeElement instanceof HTMLTextAreaElement ||
+                    activeElement?.getAttribute("contenteditable") === "true";
+                if (!hasTextInputFocused) restoreViewportOrigin();
+            }, 80);
         };
 
         updateViewportState();
         window.addEventListener("orientationchange", updateViewportState);
         window.visualViewport?.addEventListener("resize", updateViewportState);
         document.addEventListener("focusin", updateKeyboardState);
-        document.addEventListener("focusout", updateKeyboardState);
+        document.addEventListener("focusout", handleFocusOut);
 
         return () => {
             window.removeEventListener(
@@ -594,7 +612,7 @@ function useStableMobileViewport() {
                 updateViewportState,
             );
             document.removeEventListener("focusin", updateKeyboardState);
-            document.removeEventListener("focusout", updateKeyboardState);
+            document.removeEventListener("focusout", handleFocusOut);
             probe.remove();
             html.classList.remove("chorus-mobile-root");
             html.classList.remove("chorus-mobile-keyboard-open");
@@ -1346,7 +1364,6 @@ function MobileChatListSheet({
 }
 
 function MobileHeader({
-    chat,
     onBack,
     onOpenChats,
     onNewChat,
@@ -1356,8 +1373,8 @@ function MobileHeader({
     onOpenChats: () => void;
     onNewChat: () => void;
 }) {
-    const mobileWebSearch = useMobileWebSearchToggle(chat?.id);
-    const fullTitle = chatTitle(chat);
+    const { chatId } = useParams();
+    const mobileWebSearch = useMobileWebSearchToggle(chatId);
 
     return (
         <header className="mobile-header mobile-safe-top border-b bg-background/95 backdrop-blur-xl">
@@ -1374,17 +1391,9 @@ function MobileHeader({
                         <MenuIcon className="size-5" />
                     )}
                 </button>
-                <div className="min-w-0 flex-1">
-                    <h1
-                        className={`truncate ${mobileType.headerTitle}`}
-                        title={fullTitle}
-                        aria-label={`Chat title: ${fullTitle}`}
-                    >
-                        {fullTitle}
-                    </h1>
-                </div>
+                <div className="min-w-0 flex-1" />
                 <div className="flex shrink-0 items-center gap-2">
-                    <MobileModelSelect compact chatId={chat?.id} />
+                    <MobileModelSelect compact chatId={chatId} />
                     <button
                         type="button"
                         role="switch"
@@ -1420,6 +1429,75 @@ function MobileHeader({
     );
 }
 
+function MobileMessageAction({
+    icon,
+    label,
+    onClick,
+    disabled = false,
+}: {
+    icon: React.ReactNode;
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+}) {
+    return (
+        <button
+            type="button"
+            className="flex min-h-10 items-center gap-1.5 rounded-md px-1 text-sm text-muted-foreground active:text-foreground disabled:opacity-45"
+            onClick={onClick}
+            disabled={disabled}
+        >
+            {icon}
+            <span>{label}</span>
+        </button>
+    );
+}
+
+function MobileCopyAction({ text }: { text: string }) {
+    const [copied, setCopied] = useState(false);
+    const resetTimerRef = useRef<number>();
+
+    useEffect(
+        () => () => {
+            if (resetTimerRef.current !== undefined) {
+                window.clearTimeout(resetTimerRef.current);
+            }
+        },
+        [],
+    );
+
+    const copyMessage = useCallback(async () => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            if (resetTimerRef.current !== undefined) {
+                window.clearTimeout(resetTimerRef.current);
+            }
+            resetTimerRef.current = window.setTimeout(
+                () => setCopied(false),
+                1600,
+            );
+        } catch (error) {
+            console.error(error);
+            toast.error("Could not copy message");
+        }
+    }, [text]);
+
+    return (
+        <MobileMessageAction
+            icon={
+                copied ? (
+                    <CheckIcon className="size-4" strokeWidth={1.5} />
+                ) : (
+                    <CopyIcon className="size-4" strokeWidth={1.5} />
+                )
+            }
+            label={copied ? "Copied" : "Copy"}
+            onClick={() => void copyMessage()}
+        />
+    );
+}
+
 function MobileAssistantMessage({
     message,
     modelConfig,
@@ -1446,6 +1524,8 @@ function MobileAssistantMessage({
         .trim();
     const isRetrying =
         restartToolsMessage.isPending || restartLegacyMessage.isPending;
+    const stopMessage = MessageAPI.useStopMessage();
+    const isStopping = stopMessage.isPending;
 
     const retryResponse = useCallback(() => {
         if (!modelConfig || isRetrying) return;
@@ -1464,10 +1544,25 @@ function MobileAssistantMessage({
     ]);
 
     return (
-        <div className="flex w-full justify-start">
-            <div className="relative max-w-full overflow-y-auto rounded-xl border !border-special px-3.5 py-2.5 text-base">
+        <article className="w-full pt-3">
+            <div
+                className="relative w-full rounded-md border-[0.09rem] !border-special bg-background px-4 pb-4 pt-6"
+                style={{ overflowWrap: "anywhere" }}
+            >
+                {modelConfig && (
+                    <div className="absolute -top-3 left-3 flex h-6 max-w-[calc(100%-1.5rem)] items-center gap-2 bg-background px-2 text-sm text-foreground">
+                        <ProviderLogo
+                            size="sm"
+                            modelId={modelConfig.modelId}
+                            className="-mt-px shrink-0"
+                        />
+                        <span className="truncate">
+                            {modelConfig.displayName}
+                        </span>
+                    </div>
+                )}
                 {partsWithContent.length > 0 ? (
-                    <div className="max-w-none break-words">
+                    <div className="mobile-chorus-markdown max-w-none break-words">
                         {partsWithContent.map((part) => (
                             <MessageMarkdown
                                 key={`${message.id}-${part.level}`}
@@ -1485,7 +1580,7 @@ function MobileAssistantMessage({
 
                 {message.errorMessage && (
                     <div className="mt-3 text-destructive">
-                        <div className="font-medium">
+                        <div className="text-base font-medium leading-6">
                             {message.errorMessage}
                         </div>
                         <button
@@ -1504,27 +1599,129 @@ function MobileAssistantMessage({
                     </div>
                 )}
             </div>
-        </div>
+            <div className="flex min-h-10 items-center gap-5 px-1">
+                <MobileCopyAction text={fullText} />
+                {message.state === "streaming" ? (
+                    <MobileMessageAction
+                        icon={
+                            <StopCircleIcon
+                                className="size-4"
+                                strokeWidth={1.5}
+                            />
+                        }
+                        label="Stop"
+                        onClick={() =>
+                            void stopMessage.mutateAsync({
+                                chatId: message.chatId,
+                                messageId: message.id,
+                            })
+                        }
+                        disabled={isStopping}
+                    />
+                ) : (
+                    <MobileMessageAction
+                        icon={
+                            <RefreshCcwIcon
+                                className={`size-4 ${
+                                    isRetrying ? "animate-spin" : ""
+                                }`}
+                                strokeWidth={1.5}
+                            />
+                        }
+                        label="Regenerate"
+                        onClick={retryResponse}
+                        disabled={!modelConfig || isRetrying}
+                    />
+                )}
+            </div>
+        </article>
     );
 }
 
 function MobileUserMessage({ message }: { message: Message }) {
     const attachments = message.attachments ?? [];
+    const editMessage = MessageAPI.useEditMessage(message.chatId, true);
+    const [isEditing, setIsEditing] = useState(false);
+    const [draft, setDraft] = useState(message.text);
+
+    useEffect(() => {
+        if (!isEditing) setDraft(message.text);
+    }, [isEditing, message.text]);
+
+    const saveEdit = useCallback(async () => {
+        const newText = draft.trim();
+        if (!newText || newText === message.text) {
+            setIsEditing(false);
+            setDraft(message.text);
+            return;
+        }
+
+        await editMessage.mutateAsync({
+            messageId: message.id,
+            messageSetId: message.messageSetId,
+            newText,
+        });
+        setIsEditing(false);
+    }, [draft, editMessage, message]);
 
     return (
-        <div className="flex w-full justify-end">
-            <div className="max-w-[88%] rounded-xl bg-highlight px-4 py-2 text-highlight-foreground">
-                <div className="whitespace-pre-wrap break-words text-base">
-                    {message.text}
-                </div>
+        <article className="flex w-full flex-col items-end">
+            <div className="max-w-[88%] rounded-md bg-highlight px-5 py-3 text-highlight-foreground">
+                {isEditing ? (
+                    <textarea
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        className="min-h-24 w-[min(18rem,72vw)] resize-none border-0 bg-transparent p-0 text-[1rem] leading-6 text-highlight-foreground outline-none ring-0"
+                        autoFocus
+                        aria-label="Edit message"
+                    />
+                ) : (
+                    <div className="whitespace-pre-wrap break-words text-[1rem] leading-6">
+                        {message.text}
+                    </div>
+                )}
                 {attachments.length > 0 && (
                     <AttachmentPillsList
                         attachments={attachments}
                         className="mt-2"
                     />
                 )}
+                {isEditing && (
+                    <div className="mt-3 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            className="min-h-10 rounded-md px-3 text-sm font-medium active:bg-foreground/10"
+                            onClick={() => {
+                                setDraft(message.text);
+                                setIsEditing(false);
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            className="min-h-10 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                            onClick={() => void saveEdit()}
+                            disabled={!draft.trim() || editMessage.isPending}
+                        >
+                            {editMessage.isPending ? "Saving" : "Save"}
+                        </button>
+                    </div>
+                )}
             </div>
-        </div>
+            {!isEditing && (
+                <div className="flex min-h-10 items-center gap-5 px-1">
+                    <MobileCopyAction text={message.text} />
+                    <MobileMessageAction
+                        icon={
+                            <PencilIcon className="size-4" strokeWidth={1.5} />
+                        }
+                        label="Edit"
+                        onClick={() => setIsEditing(true)}
+                    />
+                </div>
+            )}
+        </article>
     );
 }
 
@@ -1836,15 +2033,12 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
             <main className="mobile-chat-scroll flex-1 overflow-y-auto overscroll-contain px-4 pt-4">
                 {messageSets.length === 0 ? (
                     <div className="flex h-full min-h-[45dvh] flex-col items-center justify-center px-6 text-center">
-                        <div className={mobileType.screenTitle}>Chorus</div>
-                        <p
-                            className={`mt-2 ${mobileType.body} text-muted-foreground`}
-                        >
-                            What can I help you with?
+                        <p className="text-base leading-6 text-muted-foreground">
+                            Send a message to get started.
                         </p>
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-5 pb-4">
+                    <div className="flex flex-col gap-4 pb-4">
                         {messageSets.map((messageSet) => (
                             <div
                                 className="mobile-message-set"
@@ -1910,12 +2104,19 @@ function MobileHome() {
         <div className="flex h-full flex-col bg-background mobile-safe-top">
             <header className="shrink-0 border-b px-4 pb-3">
                 <div className="flex min-h-24 items-center justify-between">
-                    <div>
-                        <h1 className={mobileType.appTitle}>Chorus</h1>
-                        <div className={`mt-0.5 ${mobileType.rowMeta}`}>
-                            {totalChats === 1
-                                ? "1 chat"
-                                : `${totalChats} chats`}
+                    <div className="flex min-w-0 items-center gap-3">
+                        <img
+                            src="/icon.png"
+                            alt=""
+                            className="size-10 shrink-0 scale-150 object-contain"
+                        />
+                        <div className="min-w-0">
+                            <h1 className={mobileType.appTitle}>Chorus</h1>
+                            <div className={`mt-0.5 ${mobileType.rowMeta}`}>
+                                {totalChats === 1
+                                    ? "1 chat"
+                                    : `${totalChats} chats`}
+                            </div>
                         </div>
                     </div>
                     <button
