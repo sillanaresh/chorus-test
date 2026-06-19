@@ -1902,11 +1902,11 @@ function MobileHome() {
                     </div>
                     <button
                         type="button"
-                        className={mobileIconButton}
+                        className="flex size-12 shrink-0 items-center justify-center rounded-full active:bg-muted"
                         onClick={() => navigate("/settings")}
                         aria-label="Open settings"
                     >
-                        <SettingsIcon className="size-5" />
+                        <SettingsIcon className="size-6" strokeWidth={2.25} />
                     </button>
                 </div>
                 <MobileChatSearch value={query} onChange={setQuery} />
