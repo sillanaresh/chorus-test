@@ -79,6 +79,13 @@ const mobileType = {
     caption: "text-xs leading-5 text-muted-foreground",
 } as const;
 
+const mobileSettingsType = {
+    title: mobileType.screenTitle,
+    section: "text-base font-semibold leading-6",
+    control: "text-base font-medium leading-6",
+    supporting: "text-sm font-normal leading-5 text-muted-foreground",
+} as const;
+
 const mobileIconButton =
     "flex size-10 shrink-0 items-center justify-center rounded-full active:bg-muted";
 const mobileHeaderAction =
@@ -742,7 +749,9 @@ function MobileModelSelect({
         }
 
         return (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div
+                className={`flex items-center gap-2 ${mobileSettingsType.supporting}`}
+            >
                 <Loader2Icon className="size-3.5 animate-spin" />
                 Models
             </div>
@@ -773,7 +782,7 @@ function MobileModelSelect({
         return (
             <button
                 type="button"
-                className="flex h-11 w-full items-center gap-2 rounded-md border px-3 text-left text-[15px] text-muted-foreground active:bg-muted"
+                className={`flex h-11 w-full items-center gap-2 rounded-md border px-3 text-left active:bg-muted ${mobileSettingsType.control}`}
                 onClick={refreshModels}
                 disabled={refreshOpenRouterModels.isPending}
             >
@@ -791,10 +800,10 @@ function MobileModelSelect({
         <div className={compact ? "shrink-0" : "flex flex-col gap-2"}>
             {!compact && (
                 <div className="flex items-center justify-between">
-                    <label className={mobileType.label}>Model</label>
+                    <label className={mobileSettingsType.section}>Model</label>
                     <button
                         type="button"
-                        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                        className={`flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-muted hover:text-foreground ${mobileSettingsType.supporting}`}
                         onClick={refreshModels}
                         disabled={refreshOpenRouterModels.isPending}
                         aria-live="polite"
@@ -823,7 +832,7 @@ function MobileModelSelect({
                 className={
                     compact
                         ? mobileHeaderAction
-                        : "flex h-11 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-[16px] active:bg-muted"
+                        : `flex h-11 w-full items-center gap-2 rounded-md border bg-background px-3 text-left active:bg-muted ${mobileSettingsType.control}`
                 }
                 onClick={() => setIsPickerOpen(true)}
                 disabled={openRouterModels.length === 0}
@@ -1075,7 +1084,7 @@ function MobileSettingsPanel({
             <div className="flex items-center justify-between border-b px-4 py-3">
                 <div className="flex items-center gap-2">
                     <KeyRoundIcon className="size-4 text-muted-foreground" />
-                    <h2 className={mobileType.headerTitle}>Settings</h2>
+                    <h2 className={mobileSettingsType.title}>Settings</h2>
                 </div>
                 {showClose && (
                     <button
@@ -1091,7 +1100,7 @@ function MobileSettingsPanel({
 
             <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-5">
                 <section className="flex flex-col gap-2">
-                    <div className={mobileType.label}>Appearance</div>
+                    <div className={mobileSettingsType.section}>Appearance</div>
                     <div className="grid grid-cols-3 gap-2">
                         {[
                             {
@@ -1108,7 +1117,7 @@ function MobileSettingsPanel({
                                 <button
                                     key={option.id}
                                     type="button"
-                                    className={`flex h-11 items-center justify-center gap-1.5 rounded-md border text-[15px] font-medium ${
+                                    className={`flex h-11 items-center justify-center gap-1.5 rounded-md border ${mobileSettingsType.control} ${
                                         active
                                             ? "border-primary bg-primary text-background"
                                             : "bg-background active:bg-muted"
@@ -1132,7 +1141,7 @@ function MobileSettingsPanel({
 
                 <section className="flex flex-col gap-2">
                     <label
-                        className={mobileType.label}
+                        className={mobileSettingsType.section}
                         htmlFor="mobile-openrouter-key"
                     >
                         OpenRouter API key
@@ -1148,11 +1157,11 @@ function MobileSettingsPanel({
                         type="password"
                         autoCapitalize="none"
                         autoCorrect="off"
-                        className="h-11 rounded-md border bg-background px-3 text-[16px] outline-none focus:ring-2 focus:ring-ring"
+                        className={`h-11 rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-ring ${mobileSettingsType.control}`}
                     />
                     <button
                         type="button"
-                        className="flex h-11 items-center justify-center gap-2 rounded-md border bg-background text-[15px] font-semibold active:bg-muted disabled:opacity-55"
+                        className={`flex h-11 items-center justify-center gap-2 rounded-md border bg-background active:bg-muted disabled:opacity-55 ${mobileSettingsType.control}`}
                         onClick={() => void testOpenRouterConnection()}
                         disabled={
                             !openRouterKey.trim() ||
@@ -1185,12 +1194,14 @@ function MobileSettingsPanel({
                     <section className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
                         <div className="min-w-0">
                             <div
-                                className={`flex items-center gap-2 ${mobileType.label}`}
+                                className={`flex items-center gap-2 ${mobileSettingsType.section}`}
                             >
                                 <GlobeIcon className="size-4 text-muted-foreground" />
                                 Default web search
                             </div>
-                            <div className={`mt-1 ${mobileType.caption}`}>
+                            <div
+                                className={`mt-1 ${mobileSettingsType.supporting}`}
+                            >
                                 Use web search automatically in new chats.
                             </div>
                         </div>
@@ -1208,7 +1219,7 @@ function MobileSettingsPanel({
 
                 <button
                     type="button"
-                    className="mt-auto h-12 rounded-md bg-primary px-4 text-[16px] font-semibold text-background disabled:cursor-not-allowed disabled:opacity-60"
+                    className={`mt-auto h-12 rounded-md bg-primary px-4 text-background disabled:cursor-not-allowed disabled:opacity-60 ${mobileSettingsType.control}`}
                     onClick={() => void saveOpenRouterKey()}
                     disabled={isSaving}
                 >
