@@ -986,14 +986,25 @@ export function useStopMessage() {
         mutationKey: ["stopMessage"] as const,
         mutationFn: async ({
             messageId,
+            errorMessage,
         }: {
             chatId: string;
             messageId: string;
+            errorMessage?: string;
         }) => {
-            await db.execute(
-                "UPDATE messages SET streaming_token = NULL, state = 'idle' WHERE id = $1",
-                [messageId],
-            );
+            if (errorMessage) {
+                await db.execute(
+                    `UPDATE messages
+                    SET streaming_token = NULL, state = 'idle', error_message = $1
+                    WHERE id = $2`,
+                    [errorMessage, messageId],
+                );
+            } else {
+                await db.execute(
+                    "UPDATE messages SET streaming_token = NULL, state = 'idle' WHERE id = $1",
+                    [messageId],
+                );
+            }
         },
         onSuccess: async (_data, variables, _context) => {
             await queryClient.invalidateQueries({

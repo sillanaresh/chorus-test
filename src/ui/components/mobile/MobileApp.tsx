@@ -17,6 +17,7 @@ import {
 } from "react-router-dom";
 import {
     ArrowLeftIcon,
+    BrainCircuitIcon,
     CircleCheckIcon,
     CircleXIcon,
     CheckIcon,
@@ -68,25 +69,25 @@ import * as ToolPermissionsAPI from "@core/chorus/api/ToolPermissionsAPI";
 const settingsManager = SettingsManager.getInstance();
 
 const mobileType = {
-    appTitle: "text-[30px] font-semibold leading-9",
+    appTitle: "text-[28px] font-semibold leading-8",
     screenTitle: "text-[22px] font-semibold leading-7",
-    headerTitle: "text-[17px] font-semibold leading-[22px]",
-    rowTitle: "text-[17px] font-medium leading-[22px]",
-    rowMeta: "text-[14px] leading-[19px] text-muted-foreground",
-    body: "text-[17px] leading-[25px]",
-    label: "text-[15px] font-semibold leading-5",
-    caption: "text-[13px] leading-[18px] text-muted-foreground",
+    headerTitle: "text-[17px] font-medium leading-6",
+    rowTitle: "text-[16px] font-medium leading-6",
+    rowMeta: "text-[13px] leading-5 text-muted-foreground",
+    body: "text-[15px] leading-6",
+    label: "text-sm font-medium",
+    caption: "text-xs leading-5 text-muted-foreground",
 } as const;
 
 const mobileIconButton =
     "flex size-10 shrink-0 items-center justify-center rounded-full active:bg-muted";
+const mobileHeaderAction =
+    "flex size-10 shrink-0 items-center justify-center rounded-full border border-accent-800/70 text-accent-800 active:bg-accent-100 disabled:opacity-50 dark:text-accent-25 dark:active:bg-accent-900";
 
 const mobileFab =
     "fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] right-5 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-background shadow-md active:scale-95";
 
-const mobileWebOn = "bg-accent-800 text-accent-25";
-const mobileWebOff =
-    "border border-accent-800/70 text-accent-800 dark:text-accent-25";
+const mobileWebOn = "border-accent-800 bg-accent-800 text-accent-25";
 
 function isOpenRouterModel(modelConfig: ModelConfig | undefined | null) {
     if (!modelConfig) return false;
@@ -727,6 +728,19 @@ function MobileModelSelect({
     };
 
     if (modelConfigsQuery.isPending && !selectedModel) {
+        if (compact) {
+            return (
+                <button
+                    type="button"
+                    className={mobileHeaderAction}
+                    disabled
+                    aria-label="Loading models"
+                >
+                    <Loader2Icon className="size-5 animate-spin" />
+                </button>
+            );
+        }
+
         return (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2Icon className="size-3.5 animate-spin" />
@@ -736,6 +750,26 @@ function MobileModelSelect({
     }
 
     if (modelConfigsQuery.isError && !selectedModel) {
+        if (compact) {
+            return (
+                <button
+                    type="button"
+                    className={mobileHeaderAction}
+                    onClick={refreshModels}
+                    disabled={refreshOpenRouterModels.isPending}
+                    aria-label="Retry loading models"
+                >
+                    <RefreshCcwIcon
+                        className={`size-5 ${
+                            refreshOpenRouterModels.isPending
+                                ? "animate-spin"
+                                : ""
+                        }`}
+                    />
+                </button>
+            );
+        }
+
         return (
             <button
                 type="button"
@@ -754,7 +788,7 @@ function MobileModelSelect({
     }
 
     return (
-        <div className={compact ? "min-w-0" : "flex flex-col gap-2"}>
+        <div className={compact ? "shrink-0" : "flex flex-col gap-2"}>
             {!compact && (
                 <div className="flex items-center justify-between">
                     <label className={mobileType.label}>Model</label>
@@ -788,23 +822,36 @@ function MobileModelSelect({
                 type="button"
                 className={
                     compact
-                        ? "flex h-11 w-full min-w-0 items-center gap-2 rounded-md border bg-background px-3 text-left text-[15px] active:bg-muted"
+                        ? mobileHeaderAction
                         : "flex h-11 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-[16px] active:bg-muted"
                 }
                 onClick={() => setIsPickerOpen(true)}
                 disabled={openRouterModels.length === 0}
-                aria-label="Choose model"
+                aria-label={
+                    selectedModel
+                        ? `Choose model. Current model: ${selectedModel.displayName}`
+                        : "Choose model"
+                }
             >
-                {selectedModel && (
-                    <ProviderLogo
-                        provider={getProviderName(selectedModel.modelId)}
-                        size="sm"
-                    />
+                {compact ? (
+                    <BrainCircuitIcon className="size-5" />
+                ) : (
+                    <>
+                        {selectedModel && (
+                            <ProviderLogo
+                                provider={getProviderName(
+                                    selectedModel.modelId,
+                                )}
+                                size="sm"
+                            />
+                        )}
+                        <span className="min-w-0 flex-1 truncate">
+                            {selectedModel?.displayName ??
+                                "No OpenRouter models"}
+                        </span>
+                        <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+                    </>
                 )}
-                <span className="min-w-0 flex-1 truncate">
-                    {selectedModel?.displayName ?? "No OpenRouter models"}
-                </span>
-                <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
             </button>
 
             {isPickerOpen && (
@@ -1306,58 +1353,54 @@ function MobileHeader({
 
     return (
         <header className="mobile-header mobile-safe-top border-b bg-background/95 backdrop-blur-xl">
-            <div className="flex min-h-28 flex-col justify-center gap-2 px-3 py-2">
-                <div className="flex h-11 items-center gap-2">
-                    <button
-                        type="button"
-                        className={mobileIconButton}
-                        onClick={onBack ?? onOpenChats}
-                        aria-label={onBack ? "Back to chats" : "Open chats"}
-                    >
-                        {onBack ? (
-                            <ArrowLeftIcon className="size-5" />
-                        ) : (
-                            <MenuIcon className="size-5" />
-                        )}
-                    </button>
-                    <div className="min-w-0 flex-1">
-                        <div className={`truncate ${mobileType.headerTitle}`}>
-                            {chatTitle(chat)}
-                        </div>
+            <div className="flex h-16 items-center gap-1 px-3">
+                <button
+                    type="button"
+                    className={mobileIconButton}
+                    onClick={onBack ?? onOpenChats}
+                    aria-label={onBack ? "Back to chats" : "Open chats"}
+                >
+                    {onBack ? (
+                        <ArrowLeftIcon className="size-5" />
+                    ) : (
+                        <MenuIcon className="size-5" />
+                    )}
+                </button>
+                <div className="min-w-0 flex-1">
+                    <div className={`truncate ${mobileType.headerTitle}`}>
+                        {chatTitle(chat)}
                     </div>
-                    <button
-                        type="button"
-                        role="switch"
-                        aria-checked={mobileWebSearch.enabled}
-                        className={`flex size-10 items-center justify-center rounded-full active:bg-muted ${
-                            mobileWebSearch.enabled ? mobileWebOn : mobileWebOff
-                        }`}
-                        onClick={() =>
-                            void mobileWebSearch.setEnabled(
-                                !mobileWebSearch.enabled,
-                            )
-                        }
-                        disabled={mobileWebSearch.isPending}
-                        aria-label={
-                            mobileWebSearch.enabled
-                                ? "Disable web search for this chat"
-                                : "Enable web search for this chat"
-                        }
-                    >
-                        <GlobeIcon className="size-5" />
-                    </button>
-                    <button
-                        type="button"
-                        className={mobileIconButton}
-                        onClick={onNewChat}
-                        aria-label="New chat"
-                    >
-                        <PlusIcon className="size-5" />
-                    </button>
                 </div>
-                <div className="pl-12 pr-1">
-                    <MobileModelSelect compact chatId={chat?.id} />
-                </div>
+                <MobileModelSelect compact chatId={chat?.id} />
+                <button
+                    type="button"
+                    role="switch"
+                    aria-checked={mobileWebSearch.enabled}
+                    className={`${mobileHeaderAction} ${
+                        mobileWebSearch.enabled ? mobileWebOn : ""
+                    }`}
+                    onClick={() =>
+                        void mobileWebSearch.setEnabled(
+                            !mobileWebSearch.enabled,
+                        )
+                    }
+                    disabled={mobileWebSearch.isPending}
+                    aria-label={
+                        mobileWebSearch.enabled
+                            ? "Disable web search for this chat"
+                            : "Enable web search for this chat"
+                    }
+                >
+                    <GlobeIcon className="size-5" />
+                </button>
+                <button
+                    type="button"
+                    className={mobileHeaderAction}
+                    onClick={onNewChat}
+                    aria-label="New chat"
+                >
+                    <PlusIcon className="size-5" />
+                </button>
             </div>
         </header>
     );
@@ -1370,6 +1413,16 @@ function MobileAssistantMessage({
     message: Message;
     modelConfig?: ModelConfig;
 }) {
+    const restartToolsMessage = MessageAPI.useRestartMessage(
+        message.chatId,
+        message.messageSetId,
+        message.id,
+    );
+    const restartLegacyMessage = MessageAPI.useRestartMessageLegacy(
+        message.chatId,
+        message.messageSetId,
+        message.id,
+    );
     const partsWithContent = message.parts.filter(
         (part) => part.content.trim().length > 0,
     );
@@ -1377,29 +1430,30 @@ function MobileAssistantMessage({
         .map((part) => part.content)
         .join("\n")
         .trim();
+    const isRetrying =
+        restartToolsMessage.isPending || restartLegacyMessage.isPending;
+
+    const retryResponse = useCallback(() => {
+        if (!modelConfig || isRetrying) return;
+
+        const restart =
+            message.blockType === "tools"
+                ? restartToolsMessage
+                : restartLegacyMessage;
+        void restart.mutateAsync({ modelConfig });
+    }, [
+        isRetrying,
+        message.blockType,
+        modelConfig,
+        restartLegacyMessage,
+        restartToolsMessage,
+    ]);
 
     return (
         <div className="flex w-full justify-start">
-            <div className="min-w-0 max-w-full px-1 py-2">
-                <div
-                    className={`mb-2 flex items-center gap-2 ${mobileType.caption}`}
-                >
-                    {modelConfig && (
-                        <ProviderLogo
-                            provider={getProviderName(modelConfig.modelId)}
-                            size="sm"
-                        />
-                    )}
-                    <span className="truncate">
-                        {modelConfig?.displayName ?? "Assistant"}
-                    </span>
-                    {message.state === "streaming" && (
-                        <Loader2Icon className="size-3 animate-spin" />
-                    )}
-                </div>
-
+            <div className="relative max-w-full overflow-y-auto rounded-xl border !border-special px-3.5 py-2.5 text-base">
                 {partsWithContent.length > 0 ? (
-                    <div className="mobile-message-copy prose max-w-none dark:prose-invert">
+                    <div className="max-w-none break-words">
                         {partsWithContent.map((part) => (
                             <MessageMarkdown
                                 key={`${message.id}-${part.level}`}
@@ -1408,19 +1462,31 @@ function MobileAssistantMessage({
                         ))}
                     </div>
                 ) : message.state === "streaming" ? (
-                    <div
-                        className={`flex items-center gap-2 ${mobileType.body} text-muted-foreground`}
-                    >
+                    <div className="flex items-center gap-2 text-muted-foreground">
                         <RetroSpinner />
-                        Thinking
                     </div>
                 ) : fullText ? (
                     <MessageMarkdown text={fullText} />
                 ) : null}
 
                 {message.errorMessage && (
-                    <div className="mt-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                        {message.errorMessage}
+                    <div className="mt-3 text-destructive">
+                        <div className="font-medium">
+                            {message.errorMessage}
+                        </div>
+                        <button
+                            type="button"
+                            className="mt-3 flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium text-foreground active:bg-muted disabled:opacity-50"
+                            onClick={retryResponse}
+                            disabled={!modelConfig || isRetrying}
+                        >
+                            <RefreshCcwIcon
+                                className={`size-4 ${
+                                    isRetrying ? "animate-spin" : ""
+                                }`}
+                            />
+                            Retry response
+                        </button>
                     </div>
                 )}
             </div>
@@ -1433,10 +1499,8 @@ function MobileUserMessage({ message }: { message: Message }) {
 
     return (
         <div className="flex w-full justify-end">
-            <div className="max-w-[88%] rounded-2xl bg-highlight px-4 py-2.5 text-highlight-foreground">
-                <div
-                    className={`whitespace-pre-wrap break-words ${mobileType.body}`}
-                >
+            <div className="max-w-[88%] rounded-xl bg-highlight px-4 py-2 text-highlight-foreground">
+                <div className="whitespace-pre-wrap break-words text-base">
                     {message.text}
                 </div>
                 {attachments.length > 0 && (
@@ -1480,6 +1544,25 @@ function MobileMessageSet({
     );
 }
 
+function mobileAssistantMessages(messageSets: MessageSetDetail[]) {
+    return messageSets.flatMap((messageSet) => {
+        if (messageSet.selectedBlockType === "user") return [];
+
+        const selectedToolsMessage =
+            messageSet.toolsBlock.chatMessages.find(
+                (message) => message.selected,
+            ) ?? messageSet.toolsBlock.chatMessages[0];
+        const message = selectedToolsMessage ?? messageSet.chatBlock.message;
+        return message ? [message] : [];
+    });
+}
+
+function mobileMessageProgress(message: Message) {
+    return `${message.text.length}:${message.parts
+        .map((part) => part.content.length)
+        .join(",")}`;
+}
+
 function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     const { chatId } = useParams();
     const navigate = useNavigate();
@@ -1489,9 +1572,15 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     const discardDisposableChat = ChatAPI.useDiscardDisposableQuickChat();
     const messageSetsQuery = MessageAPI.useMessageSets(chatId ?? "");
     const modelConfigsQuery = ModelsAPI.useModelConfigs();
+    const stopMessage = MessageAPI.useStopMessage();
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const eyeRef = useRef<MouseTrackingEyeRef>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const streamingMessagesRef = useRef<Message[]>([]);
+    const backgroundedStreamsRef = useRef<{
+        hiddenAt: number;
+        progressById: Map<string, string>;
+    } | null>(null);
     const [isLoadSlow, setIsLoadSlow] = useState(false);
 
     const isLoading =
@@ -1532,6 +1621,83 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
             });
         });
     }, [messageSetsQuery.data]);
+
+    useEffect(() => {
+        streamingMessagesRef.current = mobileAssistantMessages(
+            messageSetsQuery.data ?? [],
+        ).filter((message) => message.state === "streaming");
+    }, [messageSetsQuery.data]);
+
+    useEffect(() => {
+        if (!chatId) return;
+
+        let recoveryTimer: number | undefined;
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "hidden") {
+                const progressById = new Map(
+                    streamingMessagesRef.current.map((message) => [
+                        message.id,
+                        mobileMessageProgress(message),
+                    ]),
+                );
+                backgroundedStreamsRef.current =
+                    progressById.size > 0
+                        ? { hiddenAt: Date.now(), progressById }
+                        : null;
+                return;
+            }
+
+            const backgrounded = backgroundedStreamsRef.current;
+            backgroundedStreamsRef.current = null;
+            if (!backgrounded || Date.now() - backgrounded.hiddenAt < 5000) {
+                return;
+            }
+
+            recoveryTimer = window.setTimeout(() => {
+                void messageSetsQuery.refetch().then(async ({ data }) => {
+                    const currentMessages = new Map(
+                        mobileAssistantMessages(data ?? []).map((message) => [
+                            message.id,
+                            message,
+                        ]),
+                    );
+
+                    await Promise.all(
+                        Array.from(backgrounded.progressById).map(
+                            async ([messageId, previousProgress]) => {
+                                const message = currentMessages.get(messageId);
+                                if (
+                                    message?.state !== "streaming" ||
+                                    mobileMessageProgress(message) !==
+                                        previousProgress
+                                ) {
+                                    return;
+                                }
+
+                                await stopMessage.mutateAsync({
+                                    chatId,
+                                    messageId,
+                                    errorMessage:
+                                        "The response was interrupted while Chorus was in the background.",
+                                });
+                            },
+                        ),
+                    );
+                });
+            }, 2500);
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => {
+            document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange,
+            );
+            if (recoveryTimer !== undefined) {
+                window.clearTimeout(recoveryTimer);
+            }
+        };
+    }, [chatId, messageSetsQuery, stopMessage]);
 
     const createNewChat = useCallback(async () => {
         if (chatId) {

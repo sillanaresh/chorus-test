@@ -130,26 +130,13 @@ body.chorus-mobile-root {
 
 .mobile-app {
     --mobile-header-height: calc(
-        var(--mobile-safe-area-top, env(safe-area-inset-top)) + 7rem
+        var(--mobile-safe-area-top, env(safe-area-inset-top)) + 4rem
     );
     height: 100%;
     min-height: 100%;
     background: hsl(var(--background));
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
-        "Helvetica Neue", sans-serif;
-    font-size: 16px;
-    line-height: 1.4;
-    letter-spacing: 0;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
-}
-
-.mobile-app button,
-.mobile-app input,
-.mobile-app textarea,
-.mobile-app select {
-    font-family: inherit;
-    letter-spacing: 0;
 }
 
 .mobile-chat-search-input {
@@ -173,16 +160,6 @@ body.chorus-mobile-root {
 .mobile-message-set {
     content-visibility: auto;
     contain-intrinsic-size: auto 64px;
-}
-
-.mobile-message-copy {
-    font-size: 17px;
-    line-height: 1.5;
-}
-
-.mobile-message-copy :where(p, li) {
-    font-size: 17px;
-    line-height: 1.5;
 }
 
 .mobile-app-shell {
