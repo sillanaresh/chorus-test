@@ -74,7 +74,7 @@ const mobileType = {
     appTitle: "text-[1.75rem] font-semibold leading-8",
     screenTitle: "text-[1.375rem] font-semibold leading-7",
     headerTitle: "text-base font-medium leading-6",
-    rowTitle: "text-base font-medium leading-6",
+    rowTitle: "text-[1.0625rem] font-medium leading-6",
     rowMeta: "text-sm leading-5 text-muted-foreground",
     body: "text-base leading-6",
     label: "text-base font-semibold leading-6",
@@ -207,13 +207,13 @@ const MobileChatRow = memo(function MobileChatRow({
 }) {
     return (
         <div
-            className={`mobile-chat-row flex min-h-[4.5rem] items-center rounded-md ${
+            className={`mobile-chat-row flex min-h-[3.75rem] items-center rounded-md ${
                 active ? "bg-highlight text-highlight-foreground" : ""
             }`}
         >
             <button
                 type="button"
-                className="flex min-h-[4.5rem] min-w-0 flex-1 items-center gap-3 rounded-md px-3 text-left active:bg-muted"
+                className="flex min-h-[3.75rem] min-w-0 flex-1 items-center gap-3 rounded-md px-3 text-left active:bg-muted"
                 onClick={onOpen}
                 aria-current={active ? "page" : undefined}
             >
