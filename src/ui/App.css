@@ -74,7 +74,8 @@
     }
 
     :root {
-        --font-sans: "SF Pro", system-ui, sans-serif;
+        --font-sans: "Geist", -apple-system, BlinkMacSystemFont, system-ui,
+            sans-serif;
         --font-mono: "Geist Mono";
         --font-heading: var(--font-sans);
         --user-dot: 217 91% 75%;
@@ -126,6 +127,16 @@ html.chorus-mobile-root #root {
 body.chorus-mobile-root {
     position: fixed;
     inset: 0;
+    font-family:
+        "Geist",
+        -apple-system,
+        BlinkMacSystemFont,
+        system-ui,
+        sans-serif;
+    font-kerning: normal;
+    font-optical-sizing: auto;
+    letter-spacing: 0;
+    word-spacing: normal;
 }
 
 .mobile-app {
@@ -135,8 +146,24 @@ body.chorus-mobile-root {
     height: 100%;
     min-height: 100%;
     background: hsl(var(--background));
+    font-family:
+        "Geist",
+        -apple-system,
+        BlinkMacSystemFont,
+        system-ui,
+        sans-serif;
+    font-kerning: normal;
+    font-optical-sizing: auto;
+    letter-spacing: 0;
+    word-spacing: normal;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+}
+
+.mobile-app :where(button, input, textarea, select) {
+    font-family: inherit;
+    letter-spacing: inherit;
+    word-spacing: inherit;
 }
 
 .mobile-chat-search-input {
@@ -156,10 +183,15 @@ body.chorus-mobile-root {
     outline: none;
 }
 
+.mobile-chat-row,
 .mobile-model-row,
 .mobile-message-set {
     content-visibility: auto;
     contain-intrinsic-size: auto 64px;
+}
+
+.mobile-chat-row {
+    contain-intrinsic-size: auto 72px;
 }
 
 .mobile-app-shell {

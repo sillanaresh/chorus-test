@@ -217,7 +217,11 @@ function safeEncodeMarkdown(text: string): string {
     return encodedText;
 }
 
-export const MessageMarkdown = ({ text }: { text: string }) => {
+export const MessageMarkdown = React.memo(function MessageMarkdown({
+    text,
+}: {
+    text: string;
+}) {
     // encode any html that would otherwise be rendered
     const encodedText = safeEncodeMarkdown(text);
 
@@ -288,4 +292,4 @@ export const MessageMarkdown = ({ text }: { text: string }) => {
             {finalText}
         </Markdown>
     );
-};
+});

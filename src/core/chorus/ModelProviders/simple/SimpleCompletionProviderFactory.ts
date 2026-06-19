@@ -1,37 +1,53 @@
 import { ApiKeys } from "../../Models";
 import { canProceedWithProvider } from "@core/utilities/ProxyUtils";
-import { ISimpleCompletionProvider } from "./ISimpleCompletionProvider";
-import { SimpleCompletionProviderAnthropic } from "./SimpleCompletionProviderAnthropic";
-import { SimpleCompletionProviderOpenRouter } from "./SimpleCompletionProviderOpenRouter";
-import { SimpleCompletionProviderOpenAI } from "./SimpleCompletionProviderOpenAI";
-import { SimpleCompletionProviderGoogle } from "./SimpleCompletionProviderGoogle";
+import type { ISimpleCompletionProvider } from "./ISimpleCompletionProvider";
 
 type ProviderConfig = {
     name: string;
     key: keyof ApiKeys;
-    create: (apiKey: string) => ISimpleCompletionProvider;
+    create: (apiKey: string) => Promise<ISimpleCompletionProvider>;
 };
 
 const PROVIDER_PRECEDENCE: ProviderConfig[] = [
     {
         name: "anthropic",
         key: "anthropic",
-        create: (key) => new SimpleCompletionProviderAnthropic(key),
+        create: async (key) => {
+            const { SimpleCompletionProviderAnthropic } = await import(
+                "./SimpleCompletionProviderAnthropic"
+            );
+            return new SimpleCompletionProviderAnthropic(key);
+        },
     },
     {
         name: "openai",
         key: "openai",
-        create: (key) => new SimpleCompletionProviderOpenAI(key),
+        create: async (key) => {
+            const { SimpleCompletionProviderOpenAI } = await import(
+                "./SimpleCompletionProviderOpenAI"
+            );
+            return new SimpleCompletionProviderOpenAI(key);
+        },
     },
     {
         name: "google",
         key: "google",
-        create: (key) => new SimpleCompletionProviderGoogle(key),
+        create: async (key) => {
+            const { SimpleCompletionProviderGoogle } = await import(
+                "./SimpleCompletionProviderGoogle"
+            );
+            return new SimpleCompletionProviderGoogle(key);
+        },
     },
     {
         name: "openrouter",
         key: "openrouter",
-        create: (key) => new SimpleCompletionProviderOpenRouter(key),
+        create: async (key) => {
+            const { SimpleCompletionProviderOpenRouter } = await import(
+                "./SimpleCompletionProviderOpenRouter"
+            );
+            return new SimpleCompletionProviderOpenRouter(key);
+        },
     },
 ];
 
@@ -43,9 +59,22 @@ const PROVIDER_PRECEDENCE: ProviderConfig[] = [
  * @returns An ISimpleCompletionProvider instance
  * @throws Error if no suitable provider is configured
  */
-export function getSimpleCompletionProvider(
+export async function getSimpleCompletionProvider(
     apiKeys: ApiKeys,
-): ISimpleCompletionProvider {
+): Promise<ISimpleCompletionProvider> {
+    if (import.meta.env.VITE_CHORUS_MOBILE === "1") {
+        const apiKey = apiKeys.openrouter;
+        if (!apiKey) {
+            throw new Error(
+                "Please add an OpenRouter API key in Settings to generate chat titles.",
+            );
+        }
+        const { SimpleCompletionProviderOpenRouter } = await import(
+            "./SimpleCompletionProviderOpenRouter"
+        );
+        return new SimpleCompletionProviderOpenRouter(apiKey);
+    }
+
     const reasons: string[] = [];
 
     for (const provider of PROVIDER_PRECEDENCE) {
@@ -53,7 +82,7 @@ export function getSimpleCompletionProvider(
         const apiKey = apiKeys[provider.key];
 
         if (check.canProceed && apiKey) {
-            return provider.create(apiKey);
+            return await provider.create(apiKey);
         }
 
         if (!check.canProceed && check.reason) {

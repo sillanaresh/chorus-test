@@ -5,18 +5,10 @@
 //   on top of the default models.
 // - Every model comes with a default config that shares its id and has no system prompt.
 
-import { ProviderOpenAI } from "./ModelProviders/ProviderOpenAI";
-import { ProviderAnthropic } from "./ModelProviders/ProviderAnthropic";
-import { ProviderOpenRouter } from "./ModelProviders/ProviderOpenRouter";
-import { ProviderPerplexity } from "./ModelProviders/ProviderPerplexity";
-import { IProvider } from "./ModelProviders/IProvider";
+import type { IProvider } from "./ModelProviders/IProvider";
 import Database from "@tauri-apps/plugin-sql";
 import { readFile } from "@tauri-apps/plugin-fs";
-import { ProviderGoogle } from "./ModelProviders/ProviderGoogle";
 import { ollamaClient } from "./OllamaClient";
-import { ProviderOllama } from "./ModelProviders/ProviderOllama";
-import { ProviderLMStudio } from "./ModelProviders/ProviderLMStudio";
-import { ProviderGrok } from "./ModelProviders/ProviderGrok";
 import posthog from "posthog-js";
 import { UserTool, UserToolCall, UserToolResult } from "./Toolsets";
 import { Attachment } from "./api/AttachmentsAPI";
@@ -278,24 +270,68 @@ export function getProviderName(modelId: string): ProviderName {
     return providerName as ProviderName;
 }
 
-function getProvider(providerName: string): IProvider {
+async function getProvider(providerName: string): Promise<IProvider> {
+    if (import.meta.env.VITE_CHORUS_MOBILE === "1") {
+        if (providerName !== "openrouter") {
+            throw new Error(
+                `Provider ${providerName} is not available in the iOS app`,
+            );
+        }
+        const { ProviderOpenRouter } = await import(
+            "./ModelProviders/ProviderOpenRouter"
+        );
+        return new ProviderOpenRouter();
+    }
+
     switch (providerName) {
-        case "openai":
+        case "openai": {
+            const { ProviderOpenAI } = await import(
+                "./ModelProviders/ProviderOpenAI"
+            );
             return new ProviderOpenAI();
-        case "anthropic":
+        }
+        case "anthropic": {
+            const { ProviderAnthropic } = await import(
+                "./ModelProviders/ProviderAnthropic"
+            );
             return new ProviderAnthropic();
-        case "google":
+        }
+        case "google": {
+            const { ProviderGoogle } = await import(
+                "./ModelProviders/ProviderGoogle"
+            );
             return new ProviderGoogle();
-        case "openrouter":
+        }
+        case "openrouter": {
+            const { ProviderOpenRouter } = await import(
+                "./ModelProviders/ProviderOpenRouter"
+            );
             return new ProviderOpenRouter();
-        case "perplexity":
+        }
+        case "perplexity": {
+            const { ProviderPerplexity } = await import(
+                "./ModelProviders/ProviderPerplexity"
+            );
             return new ProviderPerplexity();
-        case "ollama":
+        }
+        case "ollama": {
+            const { ProviderOllama } = await import(
+                "./ModelProviders/ProviderOllama"
+            );
             return new ProviderOllama();
-        case "lmstudio":
+        }
+        case "lmstudio": {
+            const { ProviderLMStudio } = await import(
+                "./ModelProviders/ProviderLMStudio"
+            );
             return new ProviderLMStudio();
-        case "grok":
+        }
+        case "grok": {
+            const { ProviderGrok } = await import(
+                "./ModelProviders/ProviderGrok"
+            );
             return new ProviderGrok();
+        }
         default:
             throw new Error(`Unknown provider: ${providerName}`);
     }
@@ -305,7 +341,7 @@ export async function streamResponse(
     params: StreamResponseParams,
 ): Promise<void> {
     const providerName = getProviderName(params.modelConfig.modelId);
-    const provider = getProvider(providerName);
+    const provider = await getProvider(providerName);
     await provider.streamResponse(params).catch((error: unknown) => {
         console.error(error);
         const errorMessage = getErrorMessage(error);

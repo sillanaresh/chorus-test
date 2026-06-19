@@ -1,27 +1,25 @@
-// Import polyfills first
+// Import polyfills first.
 import "../polyfills";
 
-import React from "react";
+import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
-import { PostHogProvider } from "posthog-js/react";
 
-const options = {
-    api_host: "https://us.i.posthog.com",
-};
-
-// suggested by Chorus
 window.addEventListener("unhandledrejection", (event) => {
     console.error("Unhandled promise rejection:", event.reason);
 });
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-    <React.StrictMode>
-        <PostHogProvider
-            apiKey="phc_CZDlvSwRIls38T9qDCmTsRq24Q6lfrsUYHSR2baHb1"
-            options={options}
-        >
-            <App />
-        </PostHogProvider>
-    </React.StrictMode>,
-);
+async function renderApp() {
+    const rootModule =
+        import.meta.env.VITE_CHORUS_MOBILE === "1"
+            ? await import("./MobileRoot")
+            : await import("./DesktopRoot");
+    const Root = rootModule.default;
+
+    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+        <StrictMode>
+            <Root />
+        </StrictMode>,
+    );
+}
+
+void renderApp();

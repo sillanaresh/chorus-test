@@ -23,6 +23,6 @@ export async function simpleLLM(
         model: params.model ?? SimpleCompletionMode.TITLE_GENERATION,
     };
 
-    const provider = getSimpleCompletionProvider(apiKeys);
+    const provider = await getSimpleCompletionProvider(apiKeys);
     return provider.complete(prompt, paramsWithMode);
 }

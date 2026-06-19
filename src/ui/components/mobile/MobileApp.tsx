@@ -69,14 +69,14 @@ import * as ToolPermissionsAPI from "@core/chorus/api/ToolPermissionsAPI";
 const settingsManager = SettingsManager.getInstance();
 
 const mobileType = {
-    appTitle: "text-[28px] font-semibold leading-8",
-    screenTitle: "text-[22px] font-semibold leading-7",
-    headerTitle: "text-[17px] font-medium leading-6",
-    rowTitle: "text-[16px] font-medium leading-6",
-    rowMeta: "text-[13px] leading-5 text-muted-foreground",
-    body: "text-[15px] leading-6",
-    label: "text-sm font-medium",
-    caption: "text-xs leading-5 text-muted-foreground",
+    appTitle: "text-[1.75rem] font-semibold leading-8",
+    screenTitle: "text-[1.375rem] font-semibold leading-7",
+    headerTitle: "text-base font-medium leading-6",
+    rowTitle: "text-base font-medium leading-6",
+    rowMeta: "text-sm leading-5 text-muted-foreground",
+    body: "text-base leading-6",
+    label: "text-base font-semibold leading-6",
+    caption: "text-sm leading-5 text-muted-foreground",
 } as const;
 
 const mobileSettingsType = {
@@ -157,11 +157,7 @@ function mobileChatList(chats: Chat[] | undefined, query = "") {
                     chatTitle(chat)
                         .toLocaleLowerCase()
                         .includes(normalizedQuery),
-            )
-            .sort((a, b) => {
-                if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-                return b.updatedAt.localeCompare(a.updatedAt);
-            }) ?? []
+            ) ?? []
     );
 }
 
@@ -180,7 +176,7 @@ function MobileChatSearch({
                 onChange={(event) => onChange(event.target.value)}
                 placeholder="Search chats"
                 aria-label="Search chats"
-                className="mobile-chat-search-input min-w-0 flex-1 !border-0 !bg-transparent !p-0 text-[16px] !shadow-none !ring-0 outline-none placeholder:text-foreground/55 focus:!border-0 focus:!ring-0"
+                className="mobile-chat-search-input min-w-0 flex-1 !border-0 !bg-transparent !p-0 text-base leading-6 !shadow-none !ring-0 outline-none placeholder:text-foreground/55 focus:!border-0 focus:!ring-0"
             />
             {value && (
                 <button
@@ -209,7 +205,7 @@ const MobileChatRow = memo(function MobileChatRow({
 }) {
     return (
         <div
-            className={`flex min-h-[4.5rem] items-center rounded-md ${
+            className={`mobile-chat-row flex min-h-[4.5rem] items-center rounded-md ${
                 active ? "bg-highlight text-highlight-foreground" : ""
             }`}
         >
@@ -385,11 +381,11 @@ function MobileChatActionsSheet({
                                         }
                                     }}
                                     maxLength={120}
-                                    className="h-11 min-w-0 flex-1 rounded-md border bg-background px-3 text-[16px] outline-none focus:ring-2 focus:ring-ring"
+                                    className={`h-11 min-w-0 flex-1 rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-ring ${mobileSettingsType.control}`}
                                 />
                                 <button
                                     type="button"
-                                    className="flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-[15px] font-semibold text-background disabled:opacity-50"
+                                    className={`flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-background disabled:opacity-50 ${mobileSettingsType.control}`}
                                     onClick={() => void saveTitle()}
                                     disabled={!titleChanged || isPending}
                                 >
@@ -954,7 +950,7 @@ function MobileModelPickerSheet({
                             placeholder="Search models"
                             autoCapitalize="none"
                             autoCorrect="off"
-                            className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-muted-foreground"
+                            className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground ${mobileSettingsType.control}`}
                         />
                     </label>
                 </div>
@@ -1361,10 +1357,11 @@ function MobileHeader({
     onNewChat: () => void;
 }) {
     const mobileWebSearch = useMobileWebSearchToggle(chat?.id);
+    const fullTitle = chatTitle(chat);
 
     return (
         <header className="mobile-header mobile-safe-top border-b bg-background/95 backdrop-blur-xl">
-            <div className="flex h-16 items-center gap-1 px-3">
+            <div className="flex h-16 items-center gap-2 px-3">
                 <button
                     type="button"
                     className={mobileIconButton}
@@ -1378,40 +1375,46 @@ function MobileHeader({
                     )}
                 </button>
                 <div className="min-w-0 flex-1">
-                    <div className={`truncate ${mobileType.headerTitle}`}>
-                        {chatTitle(chat)}
-                    </div>
+                    <h1
+                        className={`truncate ${mobileType.headerTitle}`}
+                        title={fullTitle}
+                        aria-label={`Chat title: ${fullTitle}`}
+                    >
+                        {fullTitle}
+                    </h1>
                 </div>
-                <MobileModelSelect compact chatId={chat?.id} />
-                <button
-                    type="button"
-                    role="switch"
-                    aria-checked={mobileWebSearch.enabled}
-                    className={`${mobileHeaderAction} ${
-                        mobileWebSearch.enabled ? mobileWebOn : ""
-                    }`}
-                    onClick={() =>
-                        void mobileWebSearch.setEnabled(
-                            !mobileWebSearch.enabled,
-                        )
-                    }
-                    disabled={mobileWebSearch.isPending}
-                    aria-label={
-                        mobileWebSearch.enabled
-                            ? "Disable web search for this chat"
-                            : "Enable web search for this chat"
-                    }
-                >
-                    <GlobeIcon className="size-5" />
-                </button>
-                <button
-                    type="button"
-                    className={mobileHeaderAction}
-                    onClick={onNewChat}
-                    aria-label="New chat"
-                >
-                    <PlusIcon className="size-5" />
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                    <MobileModelSelect compact chatId={chat?.id} />
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={mobileWebSearch.enabled}
+                        className={`${mobileHeaderAction} ${
+                            mobileWebSearch.enabled ? mobileWebOn : ""
+                        }`}
+                        onClick={() =>
+                            void mobileWebSearch.setEnabled(
+                                !mobileWebSearch.enabled,
+                            )
+                        }
+                        disabled={mobileWebSearch.isPending}
+                        aria-label={
+                            mobileWebSearch.enabled
+                                ? "Disable web search for this chat"
+                                : "Enable web search for this chat"
+                        }
+                    >
+                        <GlobeIcon className="size-5" />
+                    </button>
+                    <button
+                        type="button"
+                        className={mobileHeaderAction}
+                        onClick={onNewChat}
+                        aria-label="New chat"
+                    >
+                        <PlusIcon className="size-5" />
+                    </button>
+                </div>
             </div>
         </header>
     );
@@ -1525,7 +1528,7 @@ function MobileUserMessage({ message }: { message: Message }) {
     );
 }
 
-function MobileMessageSet({
+const MobileMessageSet = memo(function MobileMessageSet({
     messageSet,
     modelConfigsById,
 }: {
@@ -1553,7 +1556,7 @@ function MobileMessageSet({
             modelConfig={modelConfigsById.get(message.model)}
         />
     );
-}
+});
 
 function mobileAssistantMessages(messageSets: MessageSetDetail[]) {
     return messageSets.flatMap((messageSet) => {
@@ -1799,14 +1802,14 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
                     <div className="flex gap-2">
                         <button
                             type="button"
-                            className="h-11 rounded-md bg-primary px-4 text-[15px] font-semibold text-background"
+                            className={`h-11 rounded-md bg-primary px-4 text-background ${mobileSettingsType.control}`}
                             onClick={retryChat}
                         >
                             Retry
                         </button>
                         <button
                             type="button"
-                            className="h-11 rounded-md border bg-background px-4 text-[15px] font-medium active:bg-muted"
+                            className={`h-11 rounded-md border bg-background px-4 active:bg-muted ${mobileSettingsType.control}`}
                             onClick={() => void leaveChat()}
                         >
                             Back to chats
@@ -1882,14 +1885,18 @@ function MobileHome() {
     const deferredQuery = useDeferredValue(query);
     const [managedChat, setManagedChat] = useState<Chat | null>(null);
 
-    const mobileChats = useMemo(
-        () => mobileChatList(chatsQuery.data, deferredQuery),
-        [chatsQuery.data, deferredQuery],
-    );
-    const totalChats = useMemo(
-        () => mobileChatList(chatsQuery.data).length,
+    const allMobileChats = useMemo(
+        () => mobileChatList(chatsQuery.data),
         [chatsQuery.data],
     );
+    const mobileChats = useMemo(() => {
+        const normalizedQuery = deferredQuery.trim().toLocaleLowerCase();
+        if (!normalizedQuery) return allMobileChats;
+        return allMobileChats.filter((chat) =>
+            chatTitle(chat).toLocaleLowerCase().includes(normalizedQuery),
+        );
+    }, [allMobileChats, deferredQuery]);
+    const totalChats = allMobileChats.length;
 
     const createNewChat = useCallback(async () => {
         await openNewChat.mutateAsync();
@@ -2053,15 +2060,15 @@ export default function MobileApp() {
                     unstyled: true,
                     classNames: {
                         toast: "mobile-ios-toast pointer-events-auto flex w-[calc(100vw-24px)] max-w-[28rem] items-start gap-3 rounded-lg border border-background/10 bg-foreground/95 px-4 py-3 text-background shadow-lg backdrop-blur-xl",
-                        title: "min-w-0 flex-1 text-[15px] font-semibold leading-5",
+                        title: "min-w-0 flex-1 text-sm font-semibold leading-5",
                         description:
-                            "mt-0.5 min-w-0 text-[13px] leading-[18px] text-background/75",
+                            "mt-0.5 min-w-0 text-xs leading-[1.125rem] text-background/75",
                         content: "min-w-0 flex-1",
                         icon: "mt-0.5 shrink-0",
                         actionButton:
-                            "rounded-md bg-background px-3 py-1.5 text-[13px] font-semibold text-foreground",
+                            "rounded-md bg-background px-3 py-1.5 text-xs font-semibold text-foreground",
                         cancelButton:
-                            "rounded-md bg-background/15 px-3 py-1.5 text-[13px] font-semibold text-background",
+                            "rounded-md bg-background/15 px-3 py-1.5 text-xs font-semibold text-background",
                     },
                 }}
             />

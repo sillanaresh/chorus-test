@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { readFileSync } from "node:fs";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 // Import and apply polyfills
@@ -14,24 +15,73 @@ const port = process.env.VITE_PORT ? parseInt(process.env.VITE_PORT) : 1420;
 const hmrPort = process.env.VITE_HMR_PORT
     ? parseInt(process.env.VITE_HMR_PORT)
     : 1421;
+const isMobileBuild = process.env.VITE_CHORUS_MOBILE === "1";
+
+const mobileBuildPlugin = {
+    name: "chorus-mobile-build",
+    transformIndexHtml(html: string) {
+        if (!isMobileBuild) return html;
+        return html
+            .replace(/\s*<script data-desktop-analytics>[\s\S]*?<\/script>/, "")
+            .replace(
+                /\s*<link rel="icon" type="image\/svg\+xml" href="\/vite\.svg" \/>/,
+                "",
+            );
+    },
+    generateBundle(this: { emitFile: (asset: object) => void }) {
+        if (!isMobileBuild) return;
+
+        const mobilePublicAssets = [
+            "fonts/Geist-VariableFont_wght.ttf",
+            "fonts/GeistMono-VariableFont_wght.ttf",
+            "openrouter_dark.svg",
+        ];
+
+        for (const fileName of mobilePublicAssets) {
+            this.emitFile({
+                type: "asset",
+                fileName,
+                source: readFileSync(
+                    path.resolve(__dirname, "public", fileName),
+                ),
+            });
+        }
+    },
+};
 
 // https://vitejs.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig(async ({ command }) => ({
     plugins: [
         react(),
+        mobileBuildPlugin,
         nodePolyfills({
             include: ["os"],
         }),
     ],
     resolve: {
-        alias: {
-            path: "path-browserify",
-            fs: "fs",
-            "@ui": path.resolve(__dirname, "./src/ui"),
-            "@core": path.resolve(__dirname, "./src/core"),
-            "@": path.resolve(__dirname, "./src"),
-        },
+        alias: [
+            ...(isMobileBuild
+                ? [
+                      {
+                          find: /^posthog-js(?:\/react)?$/,
+                          replacement: path.resolve(
+                              __dirname,
+                              "./src/ui/mobilePostHogStub.ts",
+                          ),
+                      },
+                  ]
+                : []),
+            { find: "path", replacement: "path-browserify" },
+            { find: "fs", replacement: "fs" },
+            { find: "@ui", replacement: path.resolve(__dirname, "./src/ui") },
+            {
+                find: "@core",
+                replacement: path.resolve(__dirname, "./src/core"),
+            },
+            { find: "@", replacement: path.resolve(__dirname, "./src") },
+        ],
     },
+    publicDir: isMobileBuild && command === "build" ? false : "public",
     build: {
         target: ["safari15"], // add chrome105 if we add windows support
     },
