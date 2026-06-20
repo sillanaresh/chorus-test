@@ -2,19 +2,10 @@ import { appDataDir } from "@tauri-apps/api/path";
 import { mkdir, readFile } from "@tauri-apps/plugin-fs";
 import { allowedExtensions, AttachmentType } from "@core/chorus/Models";
 import { v4 as uuidv4 } from "uuid";
-import FirecrawlApp from "@mendable/firecrawl-js";
-import { fileTypeFromBuffer } from "file-type";
 import path from "path";
 import mime from "mime-types";
 import { invoke } from "@tauri-apps/api/core";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { Attachment } from "./api/AttachmentsAPI";
-
-// Initialize PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
-    import.meta.url,
-).href;
 
 export const MAX_ATTACHMENTS = 10;
 export const MAX_SCRAPES_PER_MINUTE = 10;
@@ -22,8 +13,10 @@ export const MAX_SCRAPES_PER_MINUTE = 10;
 export const TARGET_IMAGE_SIZE_BYTES = 4.5 * 1024 * 1024; // 4.5MB in bytes
 
 // Create FirecrawlApp instance with provided API key
-export const createFirecrawlClient = (apiKey: string) =>
-    new FirecrawlApp({ apiKey });
+export const createFirecrawlClient = async (apiKey: string) => {
+    const { default: FirecrawlApp } = await import("@mendable/firecrawl-js");
+    return new FirecrawlApp({ apiKey });
+};
 
 // Add rate limiting tracker
 export const scrapeTimestamps: number[] = [];
@@ -174,6 +167,7 @@ export const resizeAndStoreFileData = async (
 ) => {
     const arrayBuffer = await file.arrayBuffer();
     const uint8Arr = new Uint8Array(arrayBuffer);
+    const { fileTypeFromBuffer } = await import("file-type");
     const typeInfo = await fileTypeFromBuffer(uint8Arr);
 
     const fileExt = path.extname(file.name).slice(1); // Remove leading dot
@@ -227,6 +221,12 @@ export const storeFile = async (filePath: string) => {
 };
 
 export async function convertPdfToPng(filePath: string): Promise<string[]> {
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+        import.meta.url,
+    ).href;
+
     // Read the PDF file data
     const fileData = await readFile(filePath);
 
@@ -310,7 +310,7 @@ export async function scrapeUrlAndWriteToPath(
     }
 
     try {
-        const firecrawl = createFirecrawlClient(firecrawlApiKey);
+        const firecrawl = await createFirecrawlClient(firecrawlApiKey);
         const mockScrapeAPI = false;
         const scrapeResult = mockScrapeAPI
             ? {

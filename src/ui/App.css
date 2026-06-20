@@ -144,8 +144,12 @@ body.chorus-mobile-root {
     --mobile-header-height: calc(
         var(--mobile-safe-area-top, env(safe-area-inset-top)) + 4rem
     );
-    height: 100%;
-    min-height: 100%;
+    position: fixed;
+    top: var(--mobile-visual-offset-top, 0px);
+    right: 0;
+    left: 0;
+    height: var(--mobile-visual-height, 100dvh);
+    min-height: 0;
     background: hsl(var(--background));
     font-family:
         "Geist",
@@ -159,6 +163,8 @@ body.chorus-mobile-root {
     word-spacing: normal;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    touch-action: pan-x pan-y;
+    transform: translateZ(0);
 }
 
 .mobile-app :where(button, input, textarea, select) {
@@ -260,7 +266,6 @@ body.chorus-mobile-root {
     left: 0;
     right: 0;
     z-index: 30;
-    transition: transform 160ms ease-out;
 }
 
 .mobile-chat-scroll {
@@ -269,21 +274,13 @@ body.chorus-mobile-root {
         152px + var(--mobile-safe-area-bottom, env(safe-area-inset-bottom))
     );
     -webkit-overflow-scrolling: touch;
-    transition: transform 160ms ease-out;
 }
 
 html.chorus-mobile-keyboard-open .mobile-header,
 html.chorus-mobile-keyboard-open .mobile-chat-scroll {
     transform: translateY(
-        var(--mobile-safe-area-top, env(safe-area-inset-top))
+        calc(var(--mobile-safe-area-top, env(safe-area-inset-top)) + 1rem)
     );
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .mobile-header,
-    .mobile-chat-scroll {
-        transition: none;
-    }
 }
 
 @layer utilities {

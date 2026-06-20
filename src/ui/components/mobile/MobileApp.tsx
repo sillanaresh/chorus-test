@@ -316,7 +316,7 @@ function MobileChatActionsSheet({
                     <div className="min-w-0">
                         <h2
                             id="mobile-chat-actions-title"
-                            className={mobileType.headerTitle}
+                            className={mobileType.label}
                         >
                             Manage chat
                         </h2>
@@ -521,6 +521,14 @@ function useStableMobileViewport() {
         const body = document.body;
         html.classList.add("chorus-mobile-root");
         body.classList.add("chorus-mobile-root");
+        const viewportMeta = document.querySelector<HTMLMetaElement>(
+            'meta[name="viewport"]',
+        );
+        const originalViewport = viewportMeta?.content;
+        viewportMeta?.setAttribute(
+            "content",
+            "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover",
+        );
 
         const probe = document.createElement("div");
         probe.style.cssText = [
@@ -563,30 +571,37 @@ function useStableMobileViewport() {
             );
         };
 
+        const restoreViewportOrigin = () => {
+            window.scrollTo({ left: 0, top: 0, behavior: "auto" });
+            document.documentElement.scrollLeft = 0;
+            document.body.scrollLeft = 0;
+        };
         const updateKeyboardState = () => {
             const activeElement = document.activeElement;
             const hasTextInputFocused =
                 activeElement instanceof HTMLInputElement ||
                 activeElement instanceof HTMLTextAreaElement ||
                 activeElement?.getAttribute("contenteditable") === "true";
-
             html.classList.toggle(
                 "chorus-mobile-keyboard-open",
                 hasTextInputFocused,
             );
         };
-        const restoreViewportOrigin = () => {
-            window.scrollTo({ left: 0, top: 0, behavior: "auto" });
-            document.documentElement.scrollLeft = 0;
-            document.body.scrollLeft = 0;
-        };
         const updateViewportState = () => {
             updateSafeAreas();
             updateKeyboardState();
+            const visualViewport = window.visualViewport;
+            html.style.setProperty(
+                "--mobile-visual-height",
+                `${visualViewport?.height ?? window.innerHeight}px`,
+            );
+            html.style.setProperty(
+                "--mobile-visual-offset-top",
+                `${Math.max(0, visualViewport?.offsetTop ?? 0)}px`,
+            );
         };
         const handleFocusOut = () => {
             window.setTimeout(() => {
-                updateKeyboardState();
                 const activeElement = document.activeElement;
                 const hasTextInputFocused =
                     activeElement instanceof HTMLInputElement ||
@@ -595,12 +610,28 @@ function useStableMobileViewport() {
                 if (!hasTextInputFocused) restoreViewportOrigin();
             }, 80);
         };
+        const preventGesture = (event: Event) => event.preventDefault();
+        const preventMultiTouch = (event: TouchEvent) => {
+            if (event.touches.length > 1) event.preventDefault();
+        };
 
         updateViewportState();
         window.addEventListener("orientationchange", updateViewportState);
         window.visualViewport?.addEventListener("resize", updateViewportState);
         document.addEventListener("focusin", updateKeyboardState);
         document.addEventListener("focusout", handleFocusOut);
+        document.addEventListener("gesturestart", preventGesture, {
+            passive: false,
+        });
+        document.addEventListener("gesturechange", preventGesture, {
+            passive: false,
+        });
+        document.addEventListener("gestureend", preventGesture, {
+            passive: false,
+        });
+        document.addEventListener("touchmove", preventMultiTouch, {
+            passive: false,
+        });
 
         return () => {
             window.removeEventListener(
@@ -613,12 +644,21 @@ function useStableMobileViewport() {
             );
             document.removeEventListener("focusin", updateKeyboardState);
             document.removeEventListener("focusout", handleFocusOut);
+            document.removeEventListener("gesturestart", preventGesture);
+            document.removeEventListener("gesturechange", preventGesture);
+            document.removeEventListener("gestureend", preventGesture);
+            document.removeEventListener("touchmove", preventMultiTouch);
             probe.remove();
             html.classList.remove("chorus-mobile-root");
             html.classList.remove("chorus-mobile-keyboard-open");
             body.classList.remove("chorus-mobile-root");
             html.style.removeProperty("--mobile-safe-area-top");
             html.style.removeProperty("--mobile-safe-area-bottom");
+            html.style.removeProperty("--mobile-visual-height");
+            html.style.removeProperty("--mobile-visual-offset-top");
+            if (originalViewport) {
+                viewportMeta?.setAttribute("content", originalViewport);
+            }
         };
     }, []);
 }
@@ -942,7 +982,7 @@ function MobileModelPickerSheet({
                     <div className="min-w-0">
                         <h2
                             id="mobile-model-picker-title"
-                            className={mobileType.headerTitle}
+                            className={mobileSettingsType.section}
                         >
                             Choose model
                         </h2>
@@ -1097,7 +1137,7 @@ function MobileSettingsPanel({
         <div className="flex h-full flex-col bg-background mobile-safe-top">
             <div className="flex items-center justify-between border-b px-4 py-3">
                 <div className="flex items-center gap-2">
-                    <KeyRoundIcon className="size-4 text-muted-foreground" />
+                    <KeyRoundIcon className="size-5 text-accent-800" />
                     <h2 className={mobileSettingsType.title}>Settings</h2>
                 </div>
                 {showClose && (
@@ -2121,11 +2161,11 @@ function MobileHome() {
                     </div>
                     <button
                         type="button"
-                        className="flex size-12 shrink-0 items-center justify-center rounded-full active:bg-muted"
+                        className={mobileHeaderAction}
                         onClick={() => navigate("/settings")}
                         aria-label="Open settings"
                     >
-                        <SettingsIcon className="size-6" strokeWidth={2.25} />
+                        <SettingsIcon className="size-6" strokeWidth={2} />
                     </button>
                 </div>
                 <MobileChatSearch value={query} onChange={setQuery} />

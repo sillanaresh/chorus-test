@@ -21,6 +21,9 @@ Tools:
 - `web_search` - Searches the web to produce a report (with citations) on a topic. Uses Perplexity Sonar (via Perplexity or OpenRouter) to produce the report.
     - `query` (string, required): The topic to search for.
     - Return values: list of webpages
+- `web_images` - Finds public images and returns ready-to-render markdown image URLs.
+    - `query` (string, required): The image subject to search for.
+    - Return values: markdown images with source links
 */
 
 export class ToolsetWeb extends Toolset {
@@ -96,8 +99,33 @@ export class ToolsetWeb extends Toolset {
 The query should be a natural-language description of the topic to search for. For example:
 - 'How has SF summer weather typically compared to NYC summer weather?'
 - 'Best resources for learning to code'
-Make sure to use full sentences in your query.
+            Make sure to use full sentences in your query.
 Assume that the user will not read the report. If you think information in the report is relevant to the user, you should repeat it.`,
+        );
+
+        this.addCustomTool(
+            "images",
+            {
+                type: "object",
+                properties: {
+                    query: {
+                        type: "string",
+                        description:
+                            "The subject of the image or photo to find.",
+                    },
+                },
+                required: ["query"],
+                additionalProperties: false,
+            },
+            async (args) => {
+                const result = await WebTools.searchImages(
+                    args.query as string,
+                );
+                return result.content;
+            },
+            `Search Wikimedia Commons for public images and return ready-to-render markdown images with source links.
+Use this tool whenever the user asks to see, show, or find an existing image or photo from the web.
+Include the returned markdown image directly in the final response so the image is visible in the conversation.`,
         );
     }
 }

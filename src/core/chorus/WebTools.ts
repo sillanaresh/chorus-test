@@ -21,6 +21,19 @@ type SearchResult = {
     error?: string;
 };
 
+type WikimediaImageInfo = {
+    thumburl?: string;
+    url?: string;
+    descriptionurl?: string;
+};
+
+type WikimediaImagePage = {
+    title: string;
+    index?: number;
+    fullurl?: string;
+    imageinfo?: WikimediaImageInfo[];
+};
+
 type SearchProviderConfig = {
     name: "perplexity" | "openrouter";
     baseURL: string;
@@ -179,6 +192,72 @@ export class WebTools {
         } catch (error) {
             return {
                 content: `<web_search_system_message>Error searching the web: ${getErrorMessage(error)}</web_search_system_message>`,
+                error: getErrorMessage(error),
+            };
+        }
+    }
+
+    static async searchImages(query: string): Promise<SearchResult> {
+        try {
+            const params = new URLSearchParams({
+                action: "query",
+                generator: "search",
+                gsrsearch: query,
+                gsrnamespace: "6",
+                gsrlimit: "5",
+                prop: "imageinfo|info",
+                iiprop: "url",
+                iiurlwidth: "1200",
+                inprop: "url",
+                format: "json",
+                origin: "*",
+            });
+            const response = await fetch(
+                `https://commons.wikimedia.org/w/api.php?${params.toString()}`,
+            );
+            if (!response.ok) {
+                throw new Error(`Image search failed (${response.status})`);
+            }
+
+            const data = (await response.json()) as {
+                query?: { pages?: Record<string, WikimediaImagePage> };
+            };
+            const pages = Object.values(data.query?.pages ?? {})
+                .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+                .flatMap((page) => {
+                    const info = page.imageinfo?.[0];
+                    const imageUrl = info?.thumburl ?? info?.url;
+                    if (!imageUrl) return [];
+
+                    return [
+                        {
+                            title: page.title.replace(/^File:/, ""),
+                            imageUrl,
+                            sourceUrl:
+                                info?.descriptionurl ??
+                                page.fullurl ??
+                                imageUrl,
+                        },
+                    ];
+                });
+
+            if (pages.length === 0) {
+                return {
+                    content: `No public images found for "${query}".`,
+                };
+            }
+
+            return {
+                content: pages
+                    .map(
+                        (image, index) =>
+                            `${index + 1}. ${image.title}\n![${image.title}](${image.imageUrl})\nSource: ${image.sourceUrl}`,
+                    )
+                    .join("\n\n"),
+            };
+        } catch (error) {
+            return {
+                content: `<web_search_system_message>Error searching for images: ${getErrorMessage(error)}</web_search_system_message>`,
                 error: getErrorMessage(error),
             };
         }

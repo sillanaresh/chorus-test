@@ -62,7 +62,11 @@ export class MediaTools {
         if (data.data && data.data.length > 0 && data.data[0].b64_json) {
             const b64Data = data.data[0].b64_json;
 
-            const filePath = await this.writeBase64ImageToDisk(prompt, b64Data);
+            const filePath = await this.writeBase64ImageToDisk(
+                prompt,
+                b64Data,
+                "png",
+            );
 
             return {
                 content: filePath,
@@ -72,9 +76,26 @@ export class MediaTools {
         }
     }
 
+    static async storeDataUrlImage(
+        label: string,
+        dataUrl: string,
+    ): Promise<string> {
+        const match = dataUrl.match(
+            /^data:image\/([a-zA-Z0-9.+-]+);base64,([\s\S]+)$/,
+        );
+        if (!match) {
+            throw new Error("Unsupported generated image format");
+        }
+
+        const extension =
+            match[1].toLowerCase() === "jpeg" ? "jpg" : match[1].toLowerCase();
+        return this.writeBase64ImageToDisk(label, match[2], extension);
+    }
+
     private static async writeBase64ImageToDisk(
-        prompt: string,
+        label: string,
         b64Data: string,
+        extension: string,
     ): Promise<string> {
         const byteString = atob(b64Data);
         const byteArray = new Uint8Array(byteString.length);
@@ -92,10 +113,10 @@ export class MediaTools {
         // Slugify the prompt and limit its length to ensure we stay under Mac's 255 char limit
         // We'll reserve 3 chars for timestamp and 5 for extension
         const maxPromptLength = 200;
-        const slugifiedPrompt = this.slugify(prompt);
+        const slugifiedPrompt = this.slugify(label) || "generated-image";
         const truncatedPrompt = slugifiedPrompt.slice(0, maxPromptLength);
 
-        const fileName = `${truncatedPrompt}-${timestamp}.webp`;
+        const fileName = `${truncatedPrompt}-${timestamp}.${extension}`;
         const persistentFilePath = await join(imagesDir, fileName);
 
         await writeFile(persistentFilePath, byteArray);

@@ -205,6 +205,88 @@ export type UsageData = {
     generation_id?: string; // OpenRouter generation ID for fetching actual costs
 };
 
+type OpenRouterModelCapability = {
+    id: string;
+    architecture?: {
+        input_modalities?: string[];
+        output_modalities?: string[];
+    };
+};
+
+const OPENROUTER_CAPABILITIES_STORAGE_KEY =
+    "chorus-openrouter-model-capabilities-v1";
+let openRouterCapabilitiesRequest: Promise<Map<string, string[]>> | undefined;
+
+function cacheOpenRouterModelCapabilities(
+    models: OpenRouterModelCapability[],
+): Map<string, string[]> {
+    const capabilities = new Map(
+        models.map((model) => [
+            model.id,
+            model.architecture?.output_modalities ?? [],
+        ]),
+    );
+
+    try {
+        window.localStorage.setItem(
+            OPENROUTER_CAPABILITIES_STORAGE_KEY,
+            JSON.stringify(Object.fromEntries(capabilities)),
+        );
+    } catch (error) {
+        console.warn("Could not cache OpenRouter model capabilities", error);
+    }
+
+    return capabilities;
+}
+
+function readCachedOpenRouterModelCapabilities(): Map<string, string[]> {
+    try {
+        const cached = window.localStorage.getItem(
+            OPENROUTER_CAPABILITIES_STORAGE_KEY,
+        );
+        if (!cached) return new Map();
+        return new Map(
+            Object.entries(JSON.parse(cached) as Record<string, string[]>),
+        );
+    } catch (error) {
+        console.warn("Could not read OpenRouter model capabilities", error);
+        return new Map();
+    }
+}
+
+export async function getOpenRouterOutputModalities(
+    modelId: string,
+): Promise<string[]> {
+    const cached = readCachedOpenRouterModelCapabilities();
+    if (cached.has(modelId)) return cached.get(modelId) ?? [];
+
+    openRouterCapabilitiesRequest ??= (async () => {
+        const abortController = new AbortController();
+        const timeout = window.setTimeout(() => abortController.abort(), 15000);
+        try {
+            const response = await fetch(
+                "https://openrouter.ai/api/v1/models",
+                { signal: abortController.signal },
+            );
+            if (!response.ok) return cached;
+            const { data } = (await response.json()) as {
+                data: OpenRouterModelCapability[];
+            };
+            return cacheOpenRouterModelCapabilities(data);
+        } catch (error) {
+            console.warn(
+                "Could not refresh OpenRouter model capabilities",
+                error,
+            );
+            return cached;
+        } finally {
+            window.clearTimeout(timeout);
+        }
+    })();
+
+    return (await openRouterCapabilitiesRequest).get(modelId) ?? [];
+}
+
 export type StreamResponseParams = {
     modelConfig: ModelConfig;
     llmConversation: LLMMessage[];
@@ -418,6 +500,7 @@ export async function downloadOpenRouterModels(db: Database): Promise<number> {
             name: string;
             architecture?: {
                 input_modalities?: string[];
+                output_modalities?: string[];
             };
             pricing: {
                 prompt: string;
@@ -427,6 +510,8 @@ export async function downloadOpenRouterModels(db: Database): Promise<number> {
             };
         }[];
     };
+
+    cacheOpenRouterModelCapabilities(openRouterModels);
 
     const rows = openRouterModels.map((model) => {
         const supportsImages =

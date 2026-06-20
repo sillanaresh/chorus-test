@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import React from "react";
+import { createPortal } from "react-dom";
 import { useAppContext } from "@ui/hooks/useAppContext";
 import AutoExpandingTextarea from "./AutoExpandingTextarea";
 import { AttachmentAddPill, AttachmentDropArea } from "./AttachmentsViews";
-import { AttachmentType } from "@core/chorus/Models";
+import { allowedExtensions, AttachmentType } from "@core/chorus/Models";
 import {
     MANAGE_MODELS_COMPARE_DIALOG_ID,
     ManageModelsBox,
@@ -32,7 +33,13 @@ import {
 } from "@ui/hooks/useAttachments";
 import { dialogActions, useDialogStore } from "@core/infra/DialogStore";
 import { ChatSuggestions } from "./ChatSuggestions";
-import { ArrowUp, ChevronDownIcon, PaperclipIcon } from "lucide-react";
+import {
+    ArrowUp,
+    ChevronDownIcon,
+    FileTextIcon,
+    ImageIcon,
+    PaperclipIcon,
+} from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { EmptyState } from "./EmptyState";
 import { handleInputPasteWithAttachments } from "@ui/lib/utils";
@@ -173,6 +180,10 @@ export function ChatInput({
         useState(false);
 
     const [isAnimatingToBottom, setIsAnimatingToBottom] = useState(false);
+    const [isMobileAttachmentMenuOpen, setIsMobileAttachmentMenuOpen] =
+        useState(false);
+    const mobileImageInputRef = useRef<HTMLInputElement>(null);
+    const mobileFileInputRef = useRef<HTMLInputElement>(null);
 
     const placeholderText = isReply ? "Reply..." : "Ask me anything...";
 
@@ -397,6 +408,21 @@ export function ChatInput({
 
         if (files) {
             await filePaste.mutateAsync(files);
+        }
+    };
+
+    const attachMobileFiles = async (
+        event: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+        const files = Array.from(event.target.files ?? []);
+        event.target.value = "";
+        if (files.length === 0) return;
+
+        try {
+            await filePaste.mutateAsync(files);
+        } catch (error) {
+            console.error("Could not attach selected files", error);
+            toast.error("Could not attach the selected files");
         }
     };
 
@@ -781,82 +807,168 @@ export function ChatInput({
 
     if (isQuickChatWindow && isMobileApp) {
         return (
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
-                <AttachmentDropArea
-                    attachments={attachmentsQuery.data ?? []}
-                    onFileDrop={fileDrop.mutate}
-                    onRemove={(attachmentId) =>
-                        removeAttachment.mutate({ attachmentId })
-                    }
-                />
-                <form
-                    onSubmit={handleSubmit}
-                    className="flex min-h-12 items-end gap-2"
-                    onPointerDown={(event) => {
-                        if (event.target === event.currentTarget) {
-                            inputRef.current?.focus();
+            <>
+                <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
+                    <AttachmentDropArea
+                        attachments={attachmentsQuery.data ?? []}
+                        onFileDrop={fileDrop.mutate}
+                        onRemove={(attachmentId) =>
+                            removeAttachment.mutate({ attachmentId })
                         }
-                    }}
-                >
-                    <button
-                        type="button"
-                        className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted"
-                        onClick={(event) => {
-                            event.preventDefault();
-                            fileSelect.mutate();
-                        }}
-                        aria-label="Add attachment"
-                    >
-                        <PaperclipIcon className="size-5" strokeWidth={1.8} />
-                    </button>
-                    <AutoExpandingTextarea
-                        ref={inputRef}
-                        value={draft}
-                        onChange={(e) => {
-                            setDraft(e.target.value);
-                        }}
-                        onPaste={(e) => void handlePaste(e)}
-                        rows={1}
-                        onKeyDown={(e) => {
-                            if (
-                                cautiousEnter &&
-                                e.key === "Enter" &&
-                                (e.metaKey || e.ctrlKey)
-                            ) {
-                                e.preventDefault();
-                                handleSubmit(e);
+                    />
+                    <input
+                        ref={mobileImageInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(event) => void attachMobileFiles(event)}
+                    />
+                    <input
+                        ref={mobileFileInputRef}
+                        type="file"
+                        accept={[
+                            ...allowedExtensions.pdf.map(
+                                (extension) => `.${extension}`,
+                            ),
+                            ...allowedExtensions.text.map(
+                                (extension) => `.${extension}`,
+                            ),
+                        ].join(",")}
+                        multiple
+                        className="hidden"
+                        onChange={(event) => void attachMobileFiles(event)}
+                    />
+                    <form
+                        onSubmit={handleSubmit}
+                        className="flex min-h-12 items-end gap-2"
+                        onPointerDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                inputRef.current?.focus();
                             }
                         }}
-                        placeholder={placeholderText}
-                        className="max-h-[32dvh] min-h-11 flex-1 rounded-2xl border bg-foreground/5 px-3.5 py-2.5 text-[17px] leading-[25px] placeholder:text-foreground/45 focus:outline-none focus:ring-0"
-                        autoFocus={false}
-                        autoComplete="off"
-                        enterKeyHint="send"
-                        inputMode="text"
-                        onFocus={() =>
-                            inputActions.setFocusedInputId(
-                                isReply
-                                    ? REPLY_CHAT_INPUT_ID
-                                    : DEFAULT_CHAT_INPUT_ID,
-                            )
-                        }
-                        onBlur={() => inputActions.setFocusedInputId(null)}
-                    />
-                    <button
-                        className={`mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full transition-all ${
-                            canSubmit
-                                ? "bg-primary text-background shadow-sm active:scale-95"
-                                : "bg-muted text-muted-foreground opacity-70"
-                        }`}
-                        onClick={handleSubmit}
-                        type="button"
-                        disabled={!canSubmit}
-                        aria-label="Send message"
                     >
-                        <ArrowUp className="size-5" strokeWidth={2.5} />
-                    </button>
-                </form>
-            </div>
+                        <button
+                            type="button"
+                            className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setIsMobileAttachmentMenuOpen(true);
+                            }}
+                            aria-label="Add attachment"
+                        >
+                            <PaperclipIcon
+                                className="size-5"
+                                strokeWidth={1.8}
+                            />
+                        </button>
+                        <AutoExpandingTextarea
+                            ref={inputRef}
+                            value={draft}
+                            onChange={(e) => {
+                                setDraft(e.target.value);
+                            }}
+                            onPaste={(e) => void handlePaste(e)}
+                            rows={1}
+                            onKeyDown={(e) => {
+                                if (
+                                    cautiousEnter &&
+                                    e.key === "Enter" &&
+                                    (e.metaKey || e.ctrlKey)
+                                ) {
+                                    e.preventDefault();
+                                    handleSubmit(e);
+                                }
+                            }}
+                            placeholder={placeholderText}
+                            className="max-h-[32dvh] min-h-11 flex-1 rounded-2xl border bg-foreground/5 px-3.5 py-2.5 text-[17px] leading-[25px] placeholder:text-foreground/45 focus:outline-none focus:ring-0"
+                            autoFocus={false}
+                            autoComplete="off"
+                            enterKeyHint="send"
+                            inputMode="text"
+                            onFocus={() =>
+                                inputActions.setFocusedInputId(
+                                    isReply
+                                        ? REPLY_CHAT_INPUT_ID
+                                        : DEFAULT_CHAT_INPUT_ID,
+                                )
+                            }
+                            onBlur={() => inputActions.setFocusedInputId(null)}
+                        />
+                        <button
+                            className={`mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full transition-all ${
+                                canSubmit
+                                    ? "bg-primary text-background shadow-sm active:scale-95"
+                                    : "bg-muted text-muted-foreground opacity-70"
+                            }`}
+                            onClick={handleSubmit}
+                            type="button"
+                            disabled={!canSubmit}
+                            aria-label="Send message"
+                        >
+                            <ArrowUp className="size-5" strokeWidth={2.5} />
+                        </button>
+                    </form>
+                </div>
+                {isMobileAttachmentMenuOpen &&
+                    createPortal(
+                        <div
+                            className="fixed inset-0 z-[90] flex items-end bg-black/35"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Add attachment"
+                            onClick={() => setIsMobileAttachmentMenuOpen(false)}
+                        >
+                            <div
+                                className="w-full rounded-t-xl bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-lg"
+                                onClick={(event) => event.stopPropagation()}
+                            >
+                                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/30" />
+                                <h2 className="text-base font-semibold leading-6">
+                                    Add attachment
+                                </h2>
+                                <div className="mt-3 flex flex-col gap-1">
+                                    <button
+                                        type="button"
+                                        className="flex h-12 items-center gap-3 rounded-md px-3 text-left text-base font-medium active:bg-muted"
+                                        onClick={() => {
+                                            setIsMobileAttachmentMenuOpen(
+                                                false,
+                                            );
+                                            mobileImageInputRef.current?.click();
+                                        }}
+                                    >
+                                        <ImageIcon className="size-5" />
+                                        Choose photo
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="flex h-12 items-center gap-3 rounded-md px-3 text-left text-base font-medium active:bg-muted"
+                                        onClick={() => {
+                                            setIsMobileAttachmentMenuOpen(
+                                                false,
+                                            );
+                                            mobileFileInputRef.current?.click();
+                                        }}
+                                    >
+                                        <FileTextIcon className="size-5" />
+                                        Choose file
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="mt-1 h-11 rounded-md border text-base font-medium active:bg-muted"
+                                        onClick={() =>
+                                            setIsMobileAttachmentMenuOpen(false)
+                                        }
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>,
+                        document.body,
+                    )}
+            </>
         );
     }
 

@@ -1,10 +1,11 @@
 import _ from "lodash";
 import OpenAI from "openai";
-import { StreamResponseParams } from "../Models";
+import { getOpenRouterOutputModalities, StreamResponseParams } from "../Models";
 import { IProvider, ModelDisabled } from "./IProvider";
 import OpenAICompletionsAPIUtils from "@core/chorus/OpenAICompletionsAPIUtils";
 import { canProceedWithProvider } from "@core/utilities/ProxyUtils";
 import JSON5 from "json5";
+import { MediaTools } from "@core/chorus/MediaTools";
 
 interface ProviderError {
     message: string;
@@ -13,6 +14,19 @@ interface ProviderError {
         metadata?: { raw?: string };
     };
     metadata?: { raw?: string };
+}
+
+type OpenRouterGeneratedImage = {
+    image_url?: { url?: string };
+    imageUrl?: { url?: string };
+};
+
+type OpenRouterDelta = OpenAI.ChatCompletionChunk.Choice.Delta & {
+    images?: OpenRouterGeneratedImage[];
+};
+
+function generatedImageUrl(image: OpenRouterGeneratedImage) {
+    return image.image_url?.url ?? image.imageUrl?.url;
 }
 
 function isProviderError(error: unknown): error is ProviderError {
@@ -39,6 +53,8 @@ export class ProviderOpenRouter implements IProvider {
         customBaseUrl,
     }: StreamResponseParams): Promise<ModelDisabled | void> {
         const modelName = modelConfig.modelId.split("::")[1];
+        const outputModalities = await getOpenRouterOutputModalities(modelName);
+        const supportsImageOutput = outputModalities.includes("image");
         // Use the model's supportedAttachmentTypes from the database instead of hardcoded list
         // Add null safety check in case supportedAttachmentTypes is undefined or null
         const supportsImages =
@@ -96,8 +112,18 @@ export class ProviderOpenRouter implements IProvider {
             include_reasoning: true,
         };
 
+        if (supportsImageOutput) {
+            (
+                params as unknown as {
+                    modalities?: Array<"image" | "text">;
+                }
+            ).modalities = outputModalities.includes("text")
+                ? ["image", "text"]
+                : ["image"];
+        }
+
         // Add tools definitions
-        if (tools && tools.length > 0) {
+        if (tools && tools.length > 0 && !supportsImageOutput) {
             params.tools =
                 OpenAICompletionsAPIUtils.convertToolDefinitions(tools);
             params.tool_choice = "auto";
@@ -105,6 +131,8 @@ export class ProviderOpenRouter implements IProvider {
 
         const chunks: OpenAI.ChatCompletionChunk[] = [];
         let generationId: string | undefined;
+        let streamedText = false;
+        const generatedImageUrls = new Set<string>();
 
         try {
             const stream = await client.chat.completions.create(params);
@@ -115,8 +143,16 @@ export class ProviderOpenRouter implements IProvider {
                 if (!generationId && chunk.id) {
                     generationId = chunk.id;
                 }
-                if (chunk.choices[0]?.delta?.content) {
-                    onChunk(chunk.choices[0].delta.content);
+                const delta = chunk.choices[0]?.delta as
+                    | OpenRouterDelta
+                    | undefined;
+                if (delta?.content) {
+                    streamedText = true;
+                    onChunk(delta.content);
+                }
+                for (const image of delta?.images ?? []) {
+                    const imageUrl = generatedImageUrl(image);
+                    if (imageUrl) generatedImageUrls.add(imageUrl);
                 }
             }
         } catch (error: unknown) {
@@ -159,6 +195,23 @@ export class ProviderOpenRouter implements IProvider {
                 }
             }
             return undefined;
+        }
+
+        if (generatedImageUrls.size > 0) {
+            const renderedImages = await Promise.all(
+                [...generatedImageUrls].map(async (imageUrl, index) => {
+                    const src = imageUrl.startsWith("data:image/")
+                        ? await MediaTools.storeDataUrlImage(
+                              `${modelName}-image-${index + 1}`,
+                              imageUrl,
+                          )
+                        : imageUrl;
+                    return `![Generated image ${index + 1}](${src})`;
+                }),
+            );
+            onChunk(
+                `${streamedText ? "\n\n" : ""}${renderedImages.join("\n\n")}`,
+            );
         }
 
         // Extract usage data from the last chunk

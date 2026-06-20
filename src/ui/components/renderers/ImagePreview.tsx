@@ -7,20 +7,48 @@ import {
 import { Button } from "../ui/button";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { dialogActions } from "@core/infra/DialogStore";
+import { useEffect, useState } from "react";
 interface ImagePreviewProps {
     src: string;
     alt?: string;
 }
 
-const imagePreviewDialogId = (src: string) => `image-preview-dialog-${src}`;
+const imagePreviewDialogId = (src: string) => {
+    let hash = 0;
+    for (let index = 0; index < src.length; index += 1) {
+        hash = (hash * 31 + src.charCodeAt(index)) | 0;
+    }
+    return `image-preview-dialog-${Math.abs(hash)}`;
+};
 
 export function ImagePreview({ src, alt }: ImagePreviewProps) {
+    const [failed, setFailed] = useState(false);
+
+    useEffect(() => setFailed(false), [src]);
+
+    if (failed) {
+        return (
+            <a
+                href={src}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 items-center rounded-md border px-3 text-sm text-muted-foreground"
+            >
+                Open image
+            </a>
+        );
+    }
+
     return (
         <>
             <img
                 src={src}
                 alt={alt}
-                className="cursor-zoom-in hover:opacity-90 transition-opacity"
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                className="h-auto max-w-full cursor-zoom-in rounded-md transition-opacity hover:opacity-90"
+                onError={() => setFailed(true)}
                 onClick={() =>
                     dialogActions.openDialog(imagePreviewDialogId(src))
                 }
