@@ -808,7 +808,7 @@ export function ChatInput({
     if (isQuickChatWindow && isMobileApp) {
         return (
             <>
-                <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
+                <div className="mobile-chat-composer fixed inset-x-0 z-30 border-t bg-background/95 px-4 pt-2 backdrop-blur-xl">
                     <AttachmentDropArea
                         attachments={attachmentsQuery.data ?? []}
                         onFileDrop={fileDrop.mutate}

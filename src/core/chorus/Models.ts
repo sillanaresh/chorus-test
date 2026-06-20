@@ -214,8 +214,18 @@ type OpenRouterModelCapability = {
 };
 
 const OPENROUTER_CAPABILITIES_STORAGE_KEY =
-    "chorus-openrouter-model-capabilities-v1";
+    "chorus-openrouter-model-capabilities-v2";
 let openRouterCapabilitiesRequest: Promise<Map<string, string[]>> | undefined;
+
+function inferOpenRouterOutputModalities(modelId: string): string[] {
+    const normalizedId = modelId.toLowerCase();
+    const isKnownImageGenerator =
+        normalizedId.includes("nano-banana") ||
+        /gemini-[^/]*-image(?:-preview)?$/.test(normalizedId) ||
+        /(?:^|\/)gpt-[^/]*-image(?:-[^/]*)?$/.test(normalizedId);
+
+    return isKnownImageGenerator ? ["image", "text"] : [];
+}
 
 function cacheOpenRouterModelCapabilities(
     models: OpenRouterModelCapability[],
@@ -258,6 +268,12 @@ export async function getOpenRouterOutputModalities(
     modelId: string,
 ): Promise<string[]> {
     const cached = readCachedOpenRouterModelCapabilities();
+    const inferred = inferOpenRouterOutputModalities(modelId);
+    if (inferred.length > 0) {
+        return Array.from(
+            new Set([...(cached.get(modelId) ?? []), ...inferred]),
+        );
+    }
     if (cached.has(modelId)) return cached.get(modelId) ?? [];
 
     openRouterCapabilitiesRequest ??= (async () => {
@@ -284,7 +300,7 @@ export async function getOpenRouterOutputModalities(
         }
     })();
 
-    return (await openRouterCapabilitiesRequest).get(modelId) ?? [];
+    return (await openRouterCapabilitiesRequest).get(modelId) ?? inferred;
 }
 
 export type StreamResponseParams = {

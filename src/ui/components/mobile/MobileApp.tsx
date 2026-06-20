@@ -586,19 +586,34 @@ function useStableMobileViewport() {
                 "chorus-mobile-keyboard-open",
                 hasTextInputFocused,
             );
+            return hasTextInputFocused;
         };
         const updateViewportState = () => {
             updateSafeAreas();
-            updateKeyboardState();
             const visualViewport = window.visualViewport;
+            const hasTextInputFocused = updateKeyboardState();
+            const visualOffsetTop = Math.max(0, visualViewport?.offsetTop ?? 0);
+            const obscuredBottom = Math.max(
+                0,
+                window.innerHeight -
+                    ((visualViewport?.height ?? window.innerHeight) +
+                        visualOffsetTop),
+            );
             html.style.setProperty(
-                "--mobile-visual-height",
-                `${visualViewport?.height ?? window.innerHeight}px`,
+                "--mobile-keyboard-inset",
+                `${hasTextInputFocused ? obscuredBottom : 0}px`,
             );
             html.style.setProperty(
                 "--mobile-visual-offset-top",
-                `${Math.max(0, visualViewport?.offsetTop ?? 0)}px`,
+                `${hasTextInputFocused ? visualOffsetTop : 0}px`,
             );
+            html.style.setProperty(
+                "--mobile-composer-bottom-padding",
+                hasTextInputFocused
+                    ? "12px"
+                    : "max(12px, env(safe-area-inset-bottom))",
+            );
+            restoreViewportOrigin();
         };
         const handleFocusOut = () => {
             window.setTimeout(() => {
@@ -607,7 +622,10 @@ function useStableMobileViewport() {
                     activeElement instanceof HTMLInputElement ||
                     activeElement instanceof HTMLTextAreaElement ||
                     activeElement?.getAttribute("contenteditable") === "true";
-                if (!hasTextInputFocused) restoreViewportOrigin();
+                if (!hasTextInputFocused) {
+                    updateViewportState();
+                    restoreViewportOrigin();
+                }
             }, 80);
         };
         const preventGesture = (event: Event) => event.preventDefault();
@@ -618,7 +636,8 @@ function useStableMobileViewport() {
         updateViewportState();
         window.addEventListener("orientationchange", updateViewportState);
         window.visualViewport?.addEventListener("resize", updateViewportState);
-        document.addEventListener("focusin", updateKeyboardState);
+        window.visualViewport?.addEventListener("scroll", updateViewportState);
+        document.addEventListener("focusin", updateViewportState);
         document.addEventListener("focusout", handleFocusOut);
         document.addEventListener("gesturestart", preventGesture, {
             passive: false,
@@ -642,7 +661,11 @@ function useStableMobileViewport() {
                 "resize",
                 updateViewportState,
             );
-            document.removeEventListener("focusin", updateKeyboardState);
+            window.visualViewport?.removeEventListener(
+                "scroll",
+                updateViewportState,
+            );
+            document.removeEventListener("focusin", updateViewportState);
             document.removeEventListener("focusout", handleFocusOut);
             document.removeEventListener("gesturestart", preventGesture);
             document.removeEventListener("gesturechange", preventGesture);
@@ -654,8 +677,9 @@ function useStableMobileViewport() {
             body.classList.remove("chorus-mobile-root");
             html.style.removeProperty("--mobile-safe-area-top");
             html.style.removeProperty("--mobile-safe-area-bottom");
-            html.style.removeProperty("--mobile-visual-height");
+            html.style.removeProperty("--mobile-keyboard-inset");
             html.style.removeProperty("--mobile-visual-offset-top");
+            html.style.removeProperty("--mobile-composer-bottom-padding");
             if (originalViewport) {
                 viewportMeta?.setAttribute("content", originalViewport);
             }
