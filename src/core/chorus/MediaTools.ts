@@ -89,13 +89,14 @@ export class MediaTools {
 
         const extension =
             match[1].toLowerCase() === "jpeg" ? "jpg" : match[1].toLowerCase();
-        return this.writeBase64ImageToDisk(label, match[2], extension);
+        return this.writeBase64ImageToDisk(label, match[2], extension, true);
     }
 
     private static async writeBase64ImageToDisk(
         label: string,
         b64Data: string,
         extension: string,
+        stableReference = false,
     ): Promise<string> {
         const byteString = atob(b64Data);
         const byteArray = new Uint8Array(byteString.length);
@@ -120,6 +121,10 @@ export class MediaTools {
         const persistentFilePath = await join(imagesDir, fileName);
 
         await writeFile(persistentFilePath, byteArray);
+
+        if (stableReference) {
+            return `chorus-generated-image://${encodeURIComponent(fileName)}`;
+        }
 
         // Convert the file path to a URL that can be used in the web view
         const webViewPath = convertFileSrc(persistentFilePath);

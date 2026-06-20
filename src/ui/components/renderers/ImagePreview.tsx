@@ -8,6 +8,8 @@ import { Button } from "../ui/button";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { dialogActions } from "@core/infra/DialogStore";
 import { useEffect, useState } from "react";
+import { appDataDir, join } from "@tauri-apps/api/path";
+import { convertFileSrc } from "@tauri-apps/api/core";
 interface ImagePreviewProps {
     src: string;
     alt?: string;
@@ -21,15 +23,68 @@ const imagePreviewDialogId = (src: string) => {
     return `image-preview-dialog-${Math.abs(hash)}`;
 };
 
+async function resolvePersistentImageSource(src: string): Promise<string> {
+    const stablePrefix = "chorus-generated-image://";
+    if (src.startsWith(stablePrefix)) {
+        const fileName = decodeURIComponent(src.slice(stablePrefix.length));
+        return convertFileSrc(
+            await join(await appDataDir(), "generated_images", fileName),
+        );
+    }
+
+    const generatedImageFile = decodeURIComponent(src).match(
+        /\/generated_images\/([^/?#]+)/,
+    )?.[1];
+    if (generatedImageFile) {
+        return convertFileSrc(
+            await join(
+                await appDataDir(),
+                "generated_images",
+                generatedImageFile,
+            ),
+        );
+    }
+
+    return src;
+}
+
 export function ImagePreview({ src, alt }: ImagePreviewProps) {
     const [failed, setFailed] = useState(false);
+    const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
 
-    useEffect(() => setFailed(false), [src]);
+    useEffect(() => {
+        let active = true;
+        setFailed(false);
+        setResolvedSrc(null);
+        void resolvePersistentImageSource(src)
+            .then((nextSrc) => {
+                if (active) {
+                    setResolvedSrc(nextSrc);
+                    setFailed(false);
+                }
+            })
+            .catch((error) => {
+                console.error("Could not resolve image source", error);
+                if (active) setFailed(true);
+            });
+        return () => {
+            active = false;
+        };
+    }, [src]);
+
+    if (!resolvedSrc) {
+        return (
+            <div
+                className="min-h-24 animate-pulse rounded-md bg-muted/60"
+                aria-label="Loading image"
+            />
+        );
+    }
 
     if (failed) {
         return (
             <a
-                href={src}
+                href={resolvedSrc}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex min-h-11 items-center rounded-md border px-3 text-sm text-muted-foreground"
@@ -42,7 +97,7 @@ export function ImagePreview({ src, alt }: ImagePreviewProps) {
     return (
         <>
             <img
-                src={src}
+                src={resolvedSrc}
                 alt={alt}
                 loading="lazy"
                 decoding="async"
@@ -58,18 +113,18 @@ export function ImagePreview({ src, alt }: ImagePreviewProps) {
                     <DialogTitle className="sr-only">Image Preview</DialogTitle>
                     <div className="flex items-center justify-center">
                         <img
-                            src={src}
+                            src={resolvedSrc}
                             alt={alt}
                             className="max-h-[90vh] object-contain rounded-lg"
                         />
                     </div>
                     <DialogFooter>
-                        {src.startsWith("asset://localhost/") && (
+                        {resolvedSrc.startsWith("asset://localhost/") && (
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                    const path = src.replace(
+                                    const path = resolvedSrc.replace(
                                         "asset://localhost",
                                         "",
                                     );
