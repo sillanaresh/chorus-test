@@ -1116,9 +1116,13 @@ function MobileSettingsPanel({
     );
     const [systemPrompt, setSystemPromptDraft] = useState(savedSystemPrompt);
     const [isSaving, setIsSaving] = useState(false);
+    const [isEditingSetting, setIsEditingSetting] = useState(false);
     const [connectionState, setConnectionState] = useState<
         "idle" | "testing" | "success" | "error"
     >("idle");
+    const panelRef = useRef<HTMLDivElement>(null);
+    const headerRef = useRef<HTMLDivElement>(null);
+    const footerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         setOpenRouterKey(apiKeys?.openrouter ?? "");
@@ -1128,6 +1132,110 @@ function MobileSettingsPanel({
     useEffect(() => {
         setSystemPromptDraft(savedSystemPrompt);
     }, [savedSystemPrompt]);
+
+    useEffect(() => {
+        const header = headerRef.current;
+        const footer = footerRef.current;
+        if (!header || !footer) return;
+
+        const updateLayoutMeasurements = () => {
+            document.documentElement.style.setProperty(
+                "--mobile-settings-header-height",
+                `${Math.ceil(header.getBoundingClientRect().height)}px`,
+            );
+            document.documentElement.style.setProperty(
+                "--mobile-settings-footer-height",
+                `${Math.ceil(footer.getBoundingClientRect().height)}px`,
+            );
+        };
+        const observer = new ResizeObserver(updateLayoutMeasurements);
+        observer.observe(header);
+        observer.observe(footer);
+        updateLayoutMeasurements();
+
+        return () => {
+            observer.disconnect();
+            document.documentElement.style.removeProperty(
+                "--mobile-settings-header-height",
+            );
+            document.documentElement.style.removeProperty(
+                "--mobile-settings-footer-height",
+            );
+        };
+    }, []);
+
+    useEffect(() => {
+        const handleViewportChange = (event: Event) => {
+            const detail = (event as CustomEvent<{ keyboardOpen?: boolean }>)
+                .detail;
+            if (!detail?.keyboardOpen) return;
+
+            window.setTimeout(() => {
+                const activeElement = document.activeElement;
+                if (
+                    panelRef.current?.contains(activeElement) &&
+                    (activeElement instanceof HTMLInputElement ||
+                        activeElement instanceof HTMLTextAreaElement)
+                ) {
+                    activeElement.scrollIntoView({
+                        block: "center",
+                        behavior: "auto",
+                    });
+                }
+            }, 120);
+        };
+
+        window.addEventListener(
+            "chorus-mobile-viewport-change",
+            handleViewportChange,
+        );
+        return () =>
+            window.removeEventListener(
+                "chorus-mobile-viewport-change",
+                handleViewportChange,
+            );
+    }, []);
+
+    const dismissSettingsKeyboard = useCallback(() => {
+        const activeElement = document.activeElement;
+        if (
+            activeElement instanceof HTMLInputElement ||
+            activeElement instanceof HTMLTextAreaElement
+        ) {
+            activeElement.blur();
+        }
+        setIsEditingSetting(false);
+    }, []);
+
+    const handleSettingsFocus = useCallback(
+        (event: React.FocusEvent<HTMLDivElement>) => {
+            if (
+                event.target instanceof HTMLInputElement ||
+                event.target instanceof HTMLTextAreaElement
+            ) {
+                setIsEditingSetting(true);
+                window.setTimeout(() => {
+                    event.target.scrollIntoView({
+                        block: "center",
+                        behavior: "smooth",
+                    });
+                }, 250);
+            }
+        },
+        [],
+    );
+
+    const handleSettingsBlur = useCallback(() => {
+        window.setTimeout(() => {
+            const activeElement = document.activeElement;
+            const panel = panelRef.current;
+            const stillEditing =
+                panel?.contains(activeElement) &&
+                (activeElement instanceof HTMLInputElement ||
+                    activeElement instanceof HTMLTextAreaElement);
+            setIsEditingSetting(Boolean(stillEditing));
+        }, 80);
+    }, []);
 
     const testOpenRouterConnection = useCallback(async () => {
         const trimmedKey = openRouterKey.trim();
@@ -1140,6 +1248,7 @@ function MobileSettingsPanel({
     }, [openRouterKey]);
 
     const saveOpenRouterKey = useCallback(async () => {
+        dismissSettingsKeyboard();
         const trimmedKey = openRouterKey.trim();
 
         if (!trimmedKey) {
@@ -1183,6 +1292,7 @@ function MobileSettingsPanel({
         openRouterKey,
         onClose,
         queryClient,
+        dismissSettingsKeyboard,
         setSystemPrompt,
         skipOnboarding,
         systemPrompt,
@@ -1192,8 +1302,16 @@ function MobileSettingsPanel({
     const systemPromptWordCount = wordCount(systemPrompt);
 
     return (
-        <div className="flex h-full flex-col bg-background mobile-safe-top">
-            <div className="flex items-center justify-between border-b px-4 py-3">
+        <div
+            ref={panelRef}
+            className="mobile-settings-panel bg-background"
+            onFocusCapture={handleSettingsFocus}
+            onBlurCapture={handleSettingsBlur}
+        >
+            <div
+                ref={headerRef}
+                className="mobile-settings-header mobile-safe-top flex items-center justify-between border-b px-4 pb-3 pt-3"
+            >
                 <div className="flex items-center gap-2">
                     <KeyRoundIcon className="size-5 text-accent-800" />
                     <h2 className={mobileSettingsType.title}>Settings</h2>
@@ -1210,7 +1328,7 @@ function MobileSettingsPanel({
                 )}
             </div>
 
-            <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-5">
+            <div className="mobile-settings-scroll flex flex-col gap-6 overflow-y-auto px-4 py-5">
                 <section className="flex flex-col gap-2">
                     <div className={mobileSettingsType.section}>Appearance</div>
                     <div className="grid grid-cols-3 gap-2">
@@ -1362,10 +1480,30 @@ function MobileSettingsPanel({
                         />
                     </section>
                 )}
+            </div>
 
+            <div
+                ref={footerRef}
+                className="mobile-settings-footer flex gap-2 border-t bg-background px-4 pt-2"
+            >
+                {isEditingSetting && (
+                    <button
+                        type="button"
+                        className={`flex h-12 items-center justify-center gap-2 rounded-md border bg-background px-4 active:bg-muted ${mobileSettingsType.control}`}
+                        onPointerDown={(event) => {
+                            event.preventDefault();
+                            dismissSettingsKeyboard();
+                        }}
+                        onClick={dismissSettingsKeyboard}
+                    >
+                        <CheckIcon className="size-4" />
+                        Done
+                    </button>
+                )}
                 <button
                     type="button"
-                    className={`mt-auto h-12 rounded-md bg-primary px-4 text-background disabled:cursor-not-allowed disabled:opacity-60 ${mobileSettingsType.control}`}
+                    className={`h-12 min-w-0 flex-1 rounded-md bg-primary px-4 text-background disabled:cursor-not-allowed disabled:opacity-60 ${mobileSettingsType.control}`}
+                    onPointerDown={dismissSettingsKeyboard}
                     onClick={() => void saveOpenRouterKey()}
                     disabled={isSaving || setSystemPrompt.isPending}
                 >

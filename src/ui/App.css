@@ -296,6 +296,52 @@ body.chorus-mobile-root {
     );
 }
 
+.mobile-settings-panel {
+    position: fixed;
+    inset: 0;
+    min-height: 0;
+}
+
+.mobile-settings-header {
+    position: fixed;
+    top: var(--mobile-visual-offset-top, 0px);
+    right: 0;
+    left: 0;
+    z-index: 30;
+    background: hsl(var(--background));
+}
+
+.mobile-settings-scroll {
+    position: fixed;
+    top: calc(
+        var(--mobile-visual-offset-top, 0px) +
+            var(--mobile-settings-header-height, 76px)
+    );
+    right: 0;
+    bottom: calc(
+        var(--mobile-keyboard-inset, 0px) +
+            var(--mobile-settings-footer-height, 68px)
+    );
+    left: 0;
+    min-height: 0;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-top: 1rem;
+    scroll-padding-bottom: 1rem;
+}
+
+.mobile-settings-footer {
+    position: fixed;
+    right: 0;
+    bottom: var(--mobile-keyboard-inset, 0px);
+    left: 0;
+    z-index: 30;
+    padding-bottom: var(
+        --mobile-composer-bottom-padding,
+        max(12px, env(safe-area-inset-bottom))
+    );
+}
+
 @layer utilities {
     /* Hide scrollbar for Chrome, Safari and Opera */
     .no-scrollbar::-webkit-scrollbar {
