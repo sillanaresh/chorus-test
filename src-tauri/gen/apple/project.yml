@@ -1,6 +1,6 @@
 name: chorus
 options:
-  bundleIdPrefix: sh.chorus.app
+  bundleIdPrefix: sh.chorus.mobile
   deploymentTarget:
     iOS: 14.0
 fileGroups: [../../src]
@@ -11,7 +11,7 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: Chorus
-      PRODUCT_BUNDLE_IDENTIFIER: sh.chorus.app
+      PRODUCT_BUNDLE_IDENTIFIER: sh.chorus.mobile
 targetTemplates:
   app:
     type: application
@@ -51,8 +51,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.14.6
-        CFBundleVersion: "0.14.6"
+        CFBundleShortVersionString: 0.14.7
+        CFBundleVersion: "0.14.7"
     entitlements:
       path: chorus_iOS/chorus_iOS.entitlements
     scheme:

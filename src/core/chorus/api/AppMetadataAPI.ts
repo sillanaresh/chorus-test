@@ -269,6 +269,36 @@ export function useSetMobileChatModelConfigId() {
     });
 }
 
+export function useMobileUserSystemPrompt() {
+    const { data: appMetadata } = useAppMetadata();
+    return appMetadata?.["mobile_user_system_prompt"] ?? "";
+}
+
+export function useSetMobileUserSystemPrompt() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationKey: ["setMobileUserSystemPrompt"] as const,
+        mutationFn: async (prompt: string) => {
+            const trimmedPrompt = prompt.trim();
+            if (trimmedPrompt) {
+                await db.execute(
+                    "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)",
+                    ["mobile_user_system_prompt", trimmedPrompt],
+                );
+            } else {
+                await db.execute(
+                    "DELETE FROM app_metadata WHERE key = 'mobile_user_system_prompt'",
+                );
+            }
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: appMetadataKeys.appMetadata(),
+            });
+        },
+    });
+}
+
 export async function getApiKeys() {
     const settingsManager = SettingsManager.getInstance();
     const settings = await settingsManager.get();

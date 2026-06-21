@@ -131,6 +131,7 @@ export function ChatInput({
         isQuickChatWindow && isMobileApp ? chatId : undefined,
     );
     const focusedChatInputId = useInputStore((state) => state.focusedInputId);
+    const mobileComposerRef = useRef<HTMLDivElement>(null);
     const selectedQuickChatModelForChat = useMemo(() => {
         const savedModelId = savedMobileChatModel.data?.[0];
         return (
@@ -188,6 +189,28 @@ export function ChatInput({
     const placeholderText = isReply ? "Reply..." : "Ask me anything...";
 
     const settings = useSettings();
+
+    useEffect(() => {
+        if (!isMobileApp || !mobileComposerRef.current) return;
+
+        const composer = mobileComposerRef.current;
+        const updateComposerHeight = () => {
+            document.documentElement.style.setProperty(
+                "--mobile-composer-height",
+                `${Math.ceil(composer.getBoundingClientRect().height)}px`,
+            );
+        };
+        const observer = new ResizeObserver(updateComposerHeight);
+        observer.observe(composer);
+        updateComposerHeight();
+
+        return () => {
+            observer.disconnect();
+            document.documentElement.style.removeProperty(
+                "--mobile-composer-height",
+            );
+        };
+    }, [isMobileApp]);
 
     const posthog = usePostHog();
 
@@ -808,7 +831,10 @@ export function ChatInput({
     if (isQuickChatWindow && isMobileApp) {
         return (
             <>
-                <div className="mobile-chat-composer fixed inset-x-0 z-30 border-t bg-background/95 px-4 pt-2 backdrop-blur-xl">
+                <div
+                    ref={mobileComposerRef}
+                    className="mobile-chat-composer fixed inset-x-0 z-30 overflow-y-auto border-t bg-background/95 px-4 pt-2 backdrop-blur-xl"
+                >
                     <AttachmentDropArea
                         attachments={attachmentsQuery.data ?? []}
                         onFileDrop={fileDrop.mutate}

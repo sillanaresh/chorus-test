@@ -97,6 +97,16 @@ const mobileFab =
     "fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] right-5 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-background shadow-md active:scale-95";
 
 const mobileWebOn = "border-accent-800 bg-accent-800 !text-accent-25";
+const MOBILE_SYSTEM_PROMPT_WORD_LIMIT = 500;
+
+function wordCount(value: string) {
+    return value.trim() ? value.trim().split(/\s+/).length : 0;
+}
+
+function limitWords(value: string, limit: number) {
+    const words = value.trim().split(/\s+/);
+    return words.length > limit ? words.slice(0, limit).join(" ") : value;
+}
 
 function isOpenRouterModel(modelConfig: ModelConfig | undefined | null) {
     if (!modelConfig) return false;
@@ -614,6 +624,14 @@ function useStableMobileViewport() {
                     : "max(12px, env(safe-area-inset-bottom))",
             );
             restoreViewportOrigin();
+            window.dispatchEvent(
+                new CustomEvent("chorus-mobile-viewport-change", {
+                    detail: {
+                        keyboardOpen: hasTextInputFocused,
+                        keyboardInset: obscuredBottom,
+                    },
+                }),
+            );
         };
         const handleFocusOut = () => {
             window.setTimeout(() => {
@@ -1091,9 +1109,12 @@ function MobileSettingsPanel({
     const { data: apiKeys } = AppMetadataAPI.useApiKeys();
     const skipOnboarding = AppMetadataAPI.useSkipOnboarding();
     const mobileWebSearch = useMobileWebSearchToggle();
+    const savedSystemPrompt = AppMetadataAPI.useMobileUserSystemPrompt();
+    const setSystemPrompt = AppMetadataAPI.useSetMobileUserSystemPrompt();
     const [openRouterKey, setOpenRouterKey] = useState(
         apiKeys?.openrouter ?? "",
     );
+    const [systemPrompt, setSystemPromptDraft] = useState(savedSystemPrompt);
     const [isSaving, setIsSaving] = useState(false);
     const [connectionState, setConnectionState] = useState<
         "idle" | "testing" | "success" | "error"
@@ -1103,6 +1124,10 @@ function MobileSettingsPanel({
         setOpenRouterKey(apiKeys?.openrouter ?? "");
         setConnectionState("idle");
     }, [apiKeys?.openrouter]);
+
+    useEffect(() => {
+        setSystemPromptDraft(savedSystemPrompt);
+    }, [savedSystemPrompt]);
 
     const testOpenRouterConnection = useCallback(async () => {
         const trimmedKey = openRouterKey.trim();
@@ -1136,6 +1161,7 @@ function MobileSettingsPanel({
                     enabled: true,
                 },
             });
+            await setSystemPrompt.mutateAsync(systemPrompt);
 
             await skipOnboarding.mutateAsync();
             await queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
@@ -1145,7 +1171,7 @@ function MobileSettingsPanel({
             await queryClient.invalidateQueries(
                 ModelsAPI.modelConfigQueries.quickChat(),
             );
-            toast.success("OpenRouter key saved");
+            toast.success("Settings saved");
             onClose?.();
         } catch (error) {
             console.error(error);
@@ -1153,9 +1179,17 @@ function MobileSettingsPanel({
         } finally {
             setIsSaving(false);
         }
-    }, [openRouterKey, onClose, queryClient, skipOnboarding]);
+    }, [
+        openRouterKey,
+        onClose,
+        queryClient,
+        setSystemPrompt,
+        skipOnboarding,
+        systemPrompt,
+    ]);
 
     const hasOpenRouterKey = Boolean(apiKeys?.openrouter);
+    const systemPromptWordCount = wordCount(systemPrompt);
 
     return (
         <div className="flex h-full flex-col bg-background mobile-safe-top">
@@ -1268,6 +1302,40 @@ function MobileSettingsPanel({
 
                 {hasOpenRouterKey && <MobileModelSelect />}
 
+                <section className="flex flex-col gap-2">
+                    <div className="flex items-end justify-between gap-3">
+                        <label
+                            className={mobileSettingsType.section}
+                            htmlFor="mobile-system-prompt"
+                        >
+                            System prompt
+                        </label>
+                        <span className={mobileSettingsType.supporting}>
+                            {systemPromptWordCount}/
+                            {MOBILE_SYSTEM_PROMPT_WORD_LIMIT} words
+                        </span>
+                    </div>
+                    <textarea
+                        id="mobile-system-prompt"
+                        value={systemPrompt}
+                        onChange={(event) =>
+                            setSystemPromptDraft(
+                                limitWords(
+                                    event.target.value,
+                                    MOBILE_SYSTEM_PROMPT_WORD_LIMIT,
+                                ),
+                            )
+                        }
+                        placeholder="Add context, preferences, tone, or instructions for every new response."
+                        rows={7}
+                        className={`min-h-40 resize-none rounded-md border bg-background px-3 py-2.5 outline-none focus:ring-2 focus:ring-ring ${mobileSettingsType.control}`}
+                    />
+                    <p className={mobileSettingsType.supporting}>
+                        This private context is included with requests across
+                        supported models.
+                    </p>
+                </section>
+
                 {hasOpenRouterKey && (
                     <section className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
                         <div className="min-w-0">
@@ -1299,7 +1367,7 @@ function MobileSettingsPanel({
                     type="button"
                     className={`mt-auto h-12 rounded-md bg-primary px-4 text-background disabled:cursor-not-allowed disabled:opacity-60 ${mobileSettingsType.control}`}
                     onClick={() => void saveOpenRouterKey()}
-                    disabled={isSaving}
+                    disabled={isSaving || setSystemPrompt.isPending}
                 >
                     {isSaving ? "Saving..." : "Save"}
                 </button>
@@ -1850,7 +1918,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     const stopMessage = MessageAPI.useStopMessage();
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const eyeRef = useRef<MouseTrackingEyeRef>(null);
-    const scrollRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLElement>(null);
     const streamingMessagesRef = useRef<Message[]>([]);
     const backgroundedStreamsRef = useRef<{
         hiddenAt: number;
@@ -1881,21 +1949,49 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
 
     const scrollToLatestMessageSet = useCallback(() => {
         requestAnimationFrame(() => {
-            scrollRef.current?.scrollIntoView({
+            const container = scrollContainerRef.current;
+            container?.scrollTo({
+                top: container.scrollHeight,
                 behavior: "smooth",
-                block: "end",
             });
         });
     }, []);
 
     useEffect(() => {
         requestAnimationFrame(() => {
-            scrollRef.current?.scrollIntoView({
+            const container = scrollContainerRef.current;
+            container?.scrollTo({
+                top: container.scrollHeight,
                 behavior: "auto",
-                block: "end",
             });
         });
     }, [messageSetsQuery.data]);
+
+    useEffect(() => {
+        const handleViewportChange = (event: Event) => {
+            const detail = (event as CustomEvent<{ keyboardOpen: boolean }>)
+                .detail;
+            if (!detail?.keyboardOpen) return;
+
+            requestAnimationFrame(() => {
+                const container = scrollContainerRef.current;
+                container?.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: "smooth",
+                });
+            });
+        };
+
+        window.addEventListener(
+            "chorus-mobile-viewport-change",
+            handleViewportChange,
+        );
+        return () =>
+            window.removeEventListener(
+                "chorus-mobile-viewport-change",
+                handleViewportChange,
+            );
+    }, []);
 
     useEffect(() => {
         streamingMessagesRef.current = mobileAssistantMessages(
@@ -2094,7 +2190,10 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
                 onNewChat={() => void createNewChat()}
             />
 
-            <main className="mobile-chat-scroll flex-1 overflow-y-auto overscroll-contain px-4 pt-4">
+            <main
+                ref={scrollContainerRef}
+                className="mobile-chat-scroll flex-1 overflow-y-auto overscroll-contain px-4 pt-4"
+            >
                 {messageSets.length === 0 ? (
                     <div className="flex h-full min-h-[45dvh] flex-col items-center justify-center px-6 text-center">
                         <p className="text-base leading-6 text-muted-foreground">
@@ -2116,7 +2215,6 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
                         ))}
                     </div>
                 )}
-                <div ref={scrollRef} />
             </main>
 
             <div className="relative shrink-0">

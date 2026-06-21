@@ -268,13 +268,22 @@ body.chorus-mobile-root {
 .mobile-chat-scroll {
     padding-top: calc(var(--mobile-header-height) + 0.875rem);
     padding-bottom: calc(
-        152px + var(--mobile-safe-area-bottom, env(safe-area-inset-bottom))
+        var(--mobile-composer-height, 76px) + var(--mobile-keyboard-inset, 0px) +
+            1rem
     );
     -webkit-overflow-scrolling: touch;
+    scroll-padding-bottom: calc(
+        var(--mobile-composer-height, 76px) + var(--mobile-keyboard-inset, 0px) +
+            1rem
+    );
 }
 
 .mobile-chat-composer {
     bottom: var(--mobile-keyboard-inset, 0px);
+    max-height: calc(
+        100% - var(--mobile-keyboard-inset, 0px) - var(--mobile-header-height) -
+            0.5rem
+    );
     padding-bottom: var(
         --mobile-composer-bottom-padding,
         max(12px, env(safe-area-inset-bottom))

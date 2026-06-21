@@ -1328,6 +1328,7 @@ export function useStreamMessagePart() {
                 })),
                 isInProject: project.id !== "default",
                 universalSystemPrompt: appMetadata["universal_system_prompt"],
+                userSystemPrompt: appMetadata["mobile_user_system_prompt"],
             });
 
             const customBaseUrl = await getCustomBaseUrl();
@@ -1402,6 +1403,7 @@ export function useStreamMessageLegacy() {
             const modelConfig = Prompts.injectSystemPrompts(modelConfigRaw, {
                 isInProject: project.id !== "default",
                 universalSystemPrompt: appMetadata["universal_system_prompt"],
+                userSystemPrompt: appMetadata["mobile_user_system_prompt"],
             });
 
             const projectContext = await getProjectContext(project.id, chatId);
