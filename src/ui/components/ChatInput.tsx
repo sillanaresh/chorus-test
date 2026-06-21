@@ -833,7 +833,7 @@ export function ChatInput({
             <>
                 <div
                     ref={mobileComposerRef}
-                    className="mobile-chat-composer fixed inset-x-0 z-30 overflow-y-auto border-t bg-background/95 px-4 pt-2 backdrop-blur-xl"
+                    className="mobile-chat-composer fixed inset-x-0 z-30 overflow-y-auto border-t bg-background px-4 pt-2"
                 >
                     <AttachmentDropArea
                         attachments={attachmentsQuery.data ?? []}
