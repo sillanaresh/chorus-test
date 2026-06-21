@@ -17,7 +17,6 @@ import {
 } from "react-router-dom";
 import {
     ArrowLeftIcon,
-    BrainCircuitIcon,
     CircleCheckIcon,
     CircleXIcon,
     CheckIcon,
@@ -92,6 +91,8 @@ const mobileIconButton =
     "flex size-10 shrink-0 items-center justify-center rounded-full active:bg-muted";
 const mobileHeaderAction =
     "flex size-10 shrink-0 items-center justify-center rounded-full border border-accent-800/70 text-accent-800 active:bg-accent-100 disabled:opacity-50 dark:text-accent-25 dark:active:bg-accent-900";
+const mobileHeaderModelControl =
+    "flex h-10 w-full min-w-0 items-center gap-2 rounded-full border border-accent-800/70 bg-background px-3 text-left text-accent-800 active:bg-accent-100 disabled:opacity-50 dark:text-accent-25 dark:active:bg-accent-900";
 
 const mobileFab =
     "fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] right-5 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-background shadow-md active:scale-95";
@@ -835,11 +836,14 @@ function MobileModelSelect({
             return (
                 <button
                     type="button"
-                    className={mobileHeaderAction}
+                    className={mobileHeaderModelControl}
                     disabled
                     aria-label="Loading models"
                 >
-                    <Loader2Icon className="size-5 animate-spin" />
+                    <Loader2Icon className="size-4 shrink-0 animate-spin" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        Loading models
+                    </span>
                 </button>
             );
         }
@@ -859,18 +863,21 @@ function MobileModelSelect({
             return (
                 <button
                     type="button"
-                    className={mobileHeaderAction}
+                    className={mobileHeaderModelControl}
                     onClick={refreshModels}
                     disabled={refreshOpenRouterModels.isPending}
                     aria-label="Retry loading models"
                 >
                     <RefreshCcwIcon
-                        className={`size-5 ${
+                        className={`size-4 shrink-0 ${
                             refreshOpenRouterModels.isPending
                                 ? "animate-spin"
                                 : ""
                         }`}
                     />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        Retry models
+                    </span>
                 </button>
             );
         }
@@ -893,7 +900,11 @@ function MobileModelSelect({
     }
 
     return (
-        <div className={compact ? "shrink-0" : "flex flex-col gap-2"}>
+        <div
+            className={
+                compact ? "min-w-0 flex-1" : "flex flex-col gap-2"
+            }
+        >
             {!compact && (
                 <div className="flex items-center justify-between">
                     <label className={mobileSettingsType.section}>Model</label>
@@ -927,7 +938,7 @@ function MobileModelSelect({
                 type="button"
                 className={
                     compact
-                        ? mobileHeaderAction
+                        ? mobileHeaderModelControl
                         : `flex h-11 w-full items-center gap-2 rounded-md border bg-background px-3 text-left active:bg-muted ${mobileSettingsType.control}`
                 }
                 onClick={() => setIsPickerOpen(true)}
@@ -939,7 +950,21 @@ function MobileModelSelect({
                 }
             >
                 {compact ? (
-                    <BrainCircuitIcon className="size-5" />
+                    <>
+                        {selectedModel && (
+                            <ProviderLogo
+                                provider={getProviderName(
+                                    selectedModel.modelId,
+                                )}
+                                size="sm"
+                            />
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                            {selectedModel?.displayName ??
+                                "No OpenRouter models"}
+                        </span>
+                        <ChevronDownIcon className="size-4 shrink-0" />
+                    </>
                 ) : (
                     <>
                         {selectedModel && (
@@ -1484,31 +1509,27 @@ function MobileSettingsPanel({
 
             <div
                 ref={footerRef}
-                className="mobile-settings-footer flex gap-2 border-t bg-background px-4 pt-2"
+                className="mobile-settings-footer flex border-t bg-background px-4 pt-2"
             >
-                {isEditingSetting && (
+                {isEditingSetting ? (
                     <button
                         type="button"
-                        className={`flex h-12 items-center justify-center gap-2 rounded-md border bg-background px-4 active:bg-muted ${mobileSettingsType.control}`}
-                        onPointerDown={(event) => {
-                            event.preventDefault();
-                            dismissSettingsKeyboard();
-                        }}
+                        className={`flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-md border bg-background px-4 active:bg-muted ${mobileSettingsType.control}`}
                         onClick={dismissSettingsKeyboard}
                     >
                         <CheckIcon className="size-4" />
                         Done
                     </button>
+                ) : (
+                    <button
+                        type="button"
+                        className={`h-12 min-w-0 flex-1 rounded-md bg-primary px-4 text-background disabled:cursor-not-allowed disabled:opacity-60 ${mobileSettingsType.control}`}
+                        onClick={() => void saveOpenRouterKey()}
+                        disabled={isSaving || setSystemPrompt.isPending}
+                    >
+                        {isSaving ? "Saving..." : "Save"}
+                    </button>
                 )}
-                <button
-                    type="button"
-                    className={`h-12 min-w-0 flex-1 rounded-md bg-primary px-4 text-background disabled:cursor-not-allowed disabled:opacity-60 ${mobileSettingsType.control}`}
-                    onPointerDown={dismissSettingsKeyboard}
-                    onClick={() => void saveOpenRouterKey()}
-                    disabled={isSaving || setSystemPrompt.isPending}
-                >
-                    {isSaving ? "Saving..." : "Save"}
-                </button>
             </div>
         </div>
     );
@@ -1661,9 +1682,8 @@ function MobileHeader({
                         <MenuIcon className="size-5" />
                     )}
                 </button>
-                <div className="min-w-0 flex-1" />
+                <MobileModelSelect compact chatId={chatId} />
                 <div className="flex shrink-0 items-center gap-2">
-                    <MobileModelSelect compact chatId={chatId} />
                     <button
                         type="button"
                         role="switch"
