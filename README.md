@@ -35,7 +35,9 @@ The iOS app keeps the main chat flow focused on small screens.
 
 -   Add and test an OpenRouter API key.
 -   Refresh and search the available OpenRouter model list.
--   Choose a model for each chat.
+-   Set default Base and Strong models for new chats.
+-   Switch between Base and Strong inside a chat with one button.
+-   Choose any available OpenRouter model for either slot without changing the global defaults.
 -   Turn web search on or off for each chat.
 -   Start chats and stream model responses.
 -   Search and manage local chat history.
@@ -44,6 +46,14 @@ The iOS app keeps the main chat flow focused on small screens.
 -   Recover cleanly when iOS interrupts a response after the app moves to the background.
 
 > iOS can suspend an application and stop a live model connection. Chorus detects an interrupted response when you return and provides a retry action. A future server job system would be required for generation that always continues while the app is suspended.
+
+### Base and Strong models
+
+The iOS Settings screen provides two model preferences. Base is the default for a new chat. Strong is available through the sparkle button beside the in-chat model picker.
+
+Each new chat copies the current Settings choices into its own Base and Strong slots. The user can then open the model picker and assign any available OpenRouter model to the active slot. These chat-level changes do not alter the global defaults.
+
+The sparkle button switches slots without clearing the conversation. Each chat remembers its active slot and its two model choices. If both Settings slots use the same model, Chorus displays a warning but still allows the user to save.
 
 ### Desktop experience
 
@@ -103,6 +113,8 @@ Rust native layer
 ```
 
 The React application owns the screens and most product logic. Modules under `src/core/chorus/api` read and update local data. TanStack Query keeps the screen state in sync with SQLite.
+
+Mobile model preferences and per-chat Base and Strong slot state are stored in the local application metadata table. The active slot is resolved to a normal saved chat model before a message is sent, so the existing provider and streaming paths remain unchanged.
 
 Model provider classes under `src/core/chorus/ModelProviders` convert a Chorus conversation into each provider format. They stream response chunks back to the message layer. The app writes those chunks to the local database while it updates the visible answer.
 

@@ -245,6 +245,164 @@ export function useMobileChatModelConfigId(chatId: string | undefined) {
     return chatId ? appMetadata?.[mobileChatModelConfigKey(chatId)] : undefined;
 }
 
+const MOBILE_BASE_MODEL_KEY = "mobile_base_model_config_id";
+const MOBILE_STRONG_MODEL_KEY = "mobile_strong_model_config_id";
+
+function mobileChatStrongModeKey(chatId: string) {
+    return `mobile_chat_strong_mode:${chatId}`;
+}
+
+function mobileChatBaseModelKey(chatId: string) {
+    return `mobile_chat_base_model_config_id:${chatId}`;
+}
+
+function mobileChatStrongModelKey(chatId: string) {
+    return `mobile_chat_strong_model_config_id:${chatId}`;
+}
+
+export function useMobileModelPreferences() {
+    const { data: appMetadata } = useAppMetadata();
+    return {
+        baseModelId: appMetadata?.[MOBILE_BASE_MODEL_KEY],
+        strongModelId: appMetadata?.[MOBILE_STRONG_MODEL_KEY],
+    };
+}
+
+export function useSetMobileModelPreferences() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationKey: ["setMobileModelPreferences"] as const,
+        mutationFn: async ({
+            baseModelId,
+            strongModelId,
+        }: {
+            baseModelId: string;
+            strongModelId: string;
+        }) => {
+            await db.execute(
+                `INSERT OR REPLACE INTO app_metadata (key, value)
+                 VALUES (?, ?), (?, ?)`,
+                [
+                    MOBILE_BASE_MODEL_KEY,
+                    baseModelId,
+                    MOBILE_STRONG_MODEL_KEY,
+                    strongModelId,
+                ],
+            );
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: appMetadataKeys.appMetadata(),
+            });
+        },
+    });
+}
+
+export function useMobileChatStrongMode(chatId: string | undefined) {
+    const { data: appMetadata } = useAppMetadata();
+    return chatId
+        ? appMetadata?.[mobileChatStrongModeKey(chatId)] === "true"
+        : false;
+}
+
+export function useSetMobileChatStrongMode() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationKey: ["setMobileChatStrongMode"] as const,
+        mutationFn: async ({
+            chatId,
+            enabled,
+        }: {
+            chatId: string;
+            enabled: boolean;
+        }) => {
+            await db.execute(
+                "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)",
+                [mobileChatStrongModeKey(chatId), enabled ? "true" : "false"],
+            );
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: appMetadataKeys.appMetadata(),
+            });
+        },
+    });
+}
+
+export function useMobileChatModelSlots(chatId: string | undefined) {
+    const { data: appMetadata } = useAppMetadata();
+    return {
+        baseModelId: chatId
+            ? appMetadata?.[mobileChatBaseModelKey(chatId)]
+            : undefined,
+        strongModelId: chatId
+            ? appMetadata?.[mobileChatStrongModelKey(chatId)]
+            : undefined,
+    };
+}
+
+export function useSetMobileChatModelSlots() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationKey: ["setMobileChatModelSlots"] as const,
+        mutationFn: async ({
+            chatId,
+            baseModelId,
+            strongModelId,
+        }: {
+            chatId: string;
+            baseModelId: string;
+            strongModelId: string;
+        }) => {
+            await db.execute(
+                `INSERT OR REPLACE INTO app_metadata (key, value)
+                 VALUES (?, ?), (?, ?)`,
+                [
+                    mobileChatBaseModelKey(chatId),
+                    baseModelId,
+                    mobileChatStrongModelKey(chatId),
+                    strongModelId,
+                ],
+            );
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: appMetadataKeys.appMetadata(),
+            });
+        },
+    });
+}
+
+export function useSetMobileChatSlotModel() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationKey: ["setMobileChatSlotModel"] as const,
+        mutationFn: async ({
+            chatId,
+            slot,
+            modelConfigId,
+        }: {
+            chatId: string;
+            slot: "base" | "strong";
+            modelConfigId: string;
+        }) => {
+            const key =
+                slot === "strong"
+                    ? mobileChatStrongModelKey(chatId)
+                    : mobileChatBaseModelKey(chatId);
+            await db.execute(
+                "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)",
+                [key, modelConfigId],
+            );
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: appMetadataKeys.appMetadata(),
+            });
+        },
+    });
+}
+
 export function useSetMobileChatModelConfigId() {
     const queryClient = useQueryClient();
     return useMutation({

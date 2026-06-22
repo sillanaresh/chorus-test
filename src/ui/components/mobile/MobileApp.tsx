@@ -37,6 +37,7 @@ import {
     RefreshCcwIcon,
     SearchIcon,
     SettingsIcon,
+    SparklesIcon,
     StopCircleIcon,
     SunIcon,
     Trash2Icon,
@@ -99,6 +100,30 @@ const mobileFab =
 
 const mobileWebOn = "border-accent-800 bg-accent-800 !text-accent-25";
 const MOBILE_SYSTEM_PROMPT_WORD_LIMIT = 500;
+
+function normalizedModelName(model: ModelConfig) {
+    return `${model.displayName} ${model.modelId}`
+        .toLocaleLowerCase()
+        .replace(/[^a-z0-9]+/g, " ");
+}
+
+function preferredMobileModels(
+    models: ModelConfig[],
+    currentModel?: ModelConfig,
+) {
+    const find = (...terms: string[]) =>
+        models.find((model) => {
+            const name = normalizedModelName(model);
+            return terms.every((term) => name.includes(term));
+        });
+    const base =
+        find("deepseek", "v4", "flash") ?? currentModel ?? models[0];
+    const strong =
+        find("deepseek", "v4", "pro") ??
+        models.find((model) => model.id !== base?.id) ??
+        base;
+    return { base, strong };
+}
 
 function wordCount(value: string) {
     return value.trim() ? value.trim().split(/\s+/).length : 0;
@@ -770,234 +795,205 @@ function MobileModelBootstrap() {
     return null;
 }
 
-function MobileModelSelect({
-    compact = false,
-    chatId,
+function MobileModelPreferenceSelect({
+    label,
+    models,
+    selectedModelId,
+    onSelect,
 }: {
-    compact?: boolean;
-    chatId?: string;
+    label: string;
+    models: ModelConfig[];
+    selectedModelId?: string;
+    onSelect: (modelConfig: ModelConfig) => void;
 }) {
+    const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const selectedModel = models.find((model) => model.id === selectedModelId);
+
+    return (
+        <div className="flex flex-col gap-2">
+            <label className={mobileSettingsType.section}>{label}</label>
+            <button
+                type="button"
+                className={`flex h-11 w-full items-center gap-2 rounded-md border bg-background px-3 text-left active:bg-muted ${mobileSettingsType.control}`}
+                onClick={() => setIsPickerOpen(true)}
+                disabled={models.length === 0}
+                aria-label={`Choose ${label.toLocaleLowerCase()}`}
+            >
+                {selectedModel && (
+                    <ProviderLogo
+                        provider={getProviderName(selectedModel.modelId)}
+                        size="sm"
+                    />
+                )}
+                <span className="min-w-0 flex-1 truncate">
+                    {selectedModel?.displayName ?? "Choose a model"}
+                </span>
+                <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+            </button>
+            {isPickerOpen && (
+                <MobileModelPickerSheet
+                    models={models}
+                    selectedModelId={selectedModelId}
+                    onClose={() => setIsPickerOpen(false)}
+                    onSelect={(modelConfig) => {
+                        onSelect(modelConfig);
+                        setIsPickerOpen(false);
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
+function MobileChatModelControl({ chatId }: { chatId?: string }) {
     const modelConfigsQuery = ModelsAPI.useModelConfigs();
     const selectedQuickChatModel = ModelsAPI.useSelectedModelConfigQuickChat();
-    const updateQuickChatModel =
-        MessageAPI.useUpdateSelectedModelConfigQuickChat();
+    const preferences = AppMetadataAPI.useMobileModelPreferences();
+    const chatSlots = AppMetadataAPI.useMobileChatModelSlots(chatId);
+    const strongMode = AppMetadataAPI.useMobileChatStrongMode(chatId);
+    const setStrongMode = AppMetadataAPI.useSetMobileChatStrongMode();
+    const setChatSlots = AppMetadataAPI.useSetMobileChatModelSlots();
+    const setChatSlotModel = AppMetadataAPI.useSetMobileChatSlotModel();
     const savedChatModel = ModelConfigChatAPI.useSavedModelConfigChat(chatId);
     const updateSavedChatModel =
         ModelConfigChatAPI.useUpdateSavedModelConfigChat();
-    const refreshOpenRouterModels = ModelsAPI.useRefreshOpenRouterModels();
     const [isPickerOpen, setIsPickerOpen] = useState(false);
-    const [refreshState, setRefreshState] = useState<
-        "idle" | "success" | "error"
-    >("idle");
-    const refreshResetTimer = useRef<number>();
-
-    const openRouterModels = useMemo(
+    const models = useMemo(
         () => openRouterModelConfigs(modelConfigsQuery.data),
         [modelConfigsQuery.data],
     );
-    const selectedModel =
-        (chatId
-            ? openRouterModels.find(
-                  (model) => model.id === savedChatModel.data?.[0],
-              )
-            : undefined) ?? selectedQuickChatModel.data;
-
-    useEffect(
-        () => () => {
-            if (refreshResetTimer.current) {
-                window.clearTimeout(refreshResetTimer.current);
-            }
-        },
-        [],
+    const defaults = preferredMobileModels(
+        models,
+        selectedQuickChatModel.data ?? undefined,
     );
+    const existingModel = models.find(
+        (model) => model.id === savedChatModel.data?.[0],
+    );
+    const initialBaseModel =
+        existingModel ??
+        models.find((model) => model.id === preferences.baseModelId) ??
+        defaults.base;
+    const initialStrongModel =
+        models.find((model) => model.id === preferences.strongModelId) ??
+        defaults.strong;
+    const baseModel =
+        models.find((model) => model.id === chatSlots.baseModelId) ??
+        initialBaseModel;
+    const strongModel =
+        models.find((model) => model.id === chatSlots.strongModelId) ??
+        initialStrongModel;
+    const activeModel = strongMode ? strongModel : baseModel;
 
-    const refreshModels = () => {
-        setRefreshState("idle");
-        refreshOpenRouterModels.mutate(undefined, {
-            onSuccess: () => {
-                setRefreshState("success");
-                refreshResetTimer.current = window.setTimeout(
-                    () => setRefreshState("idle"),
-                    2200,
-                );
-            },
-            onError: () => {
-                setRefreshState("error");
-                refreshResetTimer.current = window.setTimeout(
-                    () => setRefreshState("idle"),
-                    2600,
-                );
-            },
+    useEffect(() => {
+        if (
+            !chatId ||
+            !initialBaseModel ||
+            !initialStrongModel ||
+            chatSlots.baseModelId ||
+            chatSlots.strongModelId ||
+            setChatSlots.isPending
+        ) {
+            return;
+        }
+        setChatSlots.mutate({
+            chatId,
+            baseModelId: initialBaseModel.id,
+            strongModelId: initialStrongModel.id,
         });
+    }, [
+        chatId,
+        chatSlots.baseModelId,
+        chatSlots.strongModelId,
+        initialBaseModel,
+        initialStrongModel,
+        setChatSlots,
+    ]);
+
+    useEffect(() => {
+        if (!chatId || !activeModel || updateSavedChatModel.isPending) return;
+        if (savedChatModel.data?.[0] === activeModel.id) return;
+        updateSavedChatModel.mutate({
+            chatId,
+            modelIds: [activeModel.id],
+        });
+    }, [
+        activeModel,
+        chatId,
+        savedChatModel.data,
+        updateSavedChatModel,
+    ]);
+
+    const toggleMode = async () => {
+        if (!chatId || !baseModel || !strongModel) return;
+        const nextStrongMode = !strongMode;
+        const nextModel = nextStrongMode ? strongModel : baseModel;
+        await Promise.all([
+            setStrongMode.mutateAsync({
+                chatId,
+                enabled: nextStrongMode,
+            }),
+            updateSavedChatModel.mutateAsync({
+                chatId,
+                modelIds: [nextModel.id],
+            }),
+        ]);
     };
 
-    if (modelConfigsQuery.isPending && !selectedModel) {
-        if (compact) {
-            return (
-                <button
-                    type="button"
-                    className={mobileHeaderModelControl}
-                    disabled
-                    aria-label="Loading models"
-                >
-                    <Loader2Icon className="size-4 shrink-0 animate-spin" />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                        Loading models
-                    </span>
-                </button>
-            );
-        }
-
-        return (
-            <div
-                className={`flex items-center gap-2 ${mobileSettingsType.supporting}`}
-            >
-                <Loader2Icon className="size-3.5 animate-spin" />
-                Models
-            </div>
-        );
-    }
-
-    if (modelConfigsQuery.isError && !selectedModel) {
-        if (compact) {
-            return (
-                <button
-                    type="button"
-                    className={mobileHeaderModelControl}
-                    onClick={refreshModels}
-                    disabled={refreshOpenRouterModels.isPending}
-                    aria-label="Retry loading models"
-                >
-                    <RefreshCcwIcon
-                        className={`size-4 shrink-0 ${
-                            refreshOpenRouterModels.isPending
-                                ? "animate-spin"
-                                : ""
-                        }`}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                        Retry models
-                    </span>
-                </button>
-            );
-        }
-
-        return (
-            <button
-                type="button"
-                className={`flex h-11 w-full items-center gap-2 rounded-md border px-3 text-left active:bg-muted ${mobileSettingsType.control}`}
-                onClick={refreshModels}
-                disabled={refreshOpenRouterModels.isPending}
-            >
-                <RefreshCcwIcon
-                    className={`size-4 ${
-                        refreshOpenRouterModels.isPending ? "animate-spin" : ""
-                    }`}
-                />
-                Retry models
-            </button>
-        );
-    }
-
     return (
-        <div
-            className={
-                compact ? "min-w-0 flex-1" : "flex flex-col gap-2"
-            }
-        >
-            {!compact && (
-                <div className="flex items-center justify-between">
-                    <label className={mobileSettingsType.section}>Model</label>
-                    <button
-                        type="button"
-                        className={`flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-muted hover:text-foreground ${mobileSettingsType.supporting}`}
-                        onClick={refreshModels}
-                        disabled={refreshOpenRouterModels.isPending}
-                        aria-live="polite"
-                    >
-                        {refreshOpenRouterModels.isPending ? (
-                            <Loader2Icon className="size-3.5 animate-spin" />
-                        ) : refreshState === "success" ? (
-                            <CheckIcon className="size-3.5" />
-                        ) : refreshState === "error" ? (
-                            <XIcon className="size-3.5" />
-                        ) : (
-                            <RefreshCcwIcon className="size-3.5" />
-                        )}
-                        {refreshOpenRouterModels.isPending
-                            ? "Refreshing"
-                            : refreshState === "success"
-                              ? "Updated"
-                              : refreshState === "error"
-                                ? "Retry"
-                                : "Refresh"}
-                    </button>
-                </div>
-            )}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
                 type="button"
-                className={
-                    compact
-                        ? mobileHeaderModelControl
-                        : `flex h-11 w-full items-center gap-2 rounded-md border bg-background px-3 text-left active:bg-muted ${mobileSettingsType.control}`
-                }
+                className={mobileHeaderModelControl}
                 onClick={() => setIsPickerOpen(true)}
-                disabled={openRouterModels.length === 0}
+                disabled={!activeModel || models.length === 0}
+                aria-label={`Choose model for the ${strongMode ? "strong" : "base"} slot. Current model: ${activeModel?.displayName ?? "unavailable"}`}
+            >
+                {activeModel && (
+                    <ProviderLogo
+                        provider={getProviderName(activeModel.modelId)}
+                        size="sm"
+                    />
+                )}
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {activeModel?.displayName ?? "Choose model"}
+                </span>
+                <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+            </button>
+            <button
+                type="button"
+                role="switch"
+                aria-checked={strongMode}
+                className={`${mobileHeaderAction} ${
+                    strongMode ? mobileWebOn : ""
+                }`}
+                onClick={() => void toggleMode()}
+                disabled={!chatId || !activeModel || setStrongMode.isPending}
                 aria-label={
-                    selectedModel
-                        ? `Choose model. Current model: ${selectedModel.displayName}`
-                        : "Choose model"
+                    strongMode
+                        ? "Use base model"
+                        : "Think harder with strong model"
                 }
             >
-                {compact ? (
-                    <>
-                        {selectedModel && (
-                            <ProviderLogo
-                                provider={getProviderName(
-                                    selectedModel.modelId,
-                                )}
-                                size="sm"
-                            />
-                        )}
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                            {selectedModel?.displayName ??
-                                "No OpenRouter models"}
-                        </span>
-                        <ChevronDownIcon className="size-4 shrink-0" />
-                    </>
-                ) : (
-                    <>
-                        {selectedModel && (
-                            <ProviderLogo
-                                provider={getProviderName(
-                                    selectedModel.modelId,
-                                )}
-                                size="sm"
-                            />
-                        )}
-                        <span className="min-w-0 flex-1 truncate">
-                            {selectedModel?.displayName ??
-                                "No OpenRouter models"}
-                        </span>
-                        <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
-                    </>
-                )}
+                <SparklesIcon className="size-5" />
             </button>
-
             {isPickerOpen && (
                 <MobileModelPickerSheet
-                    models={openRouterModels}
-                    selectedModelId={selectedModel?.id}
+                    models={models}
+                    selectedModelId={activeModel?.id}
                     onClose={() => setIsPickerOpen(false)}
                     onSelect={(modelConfig) => {
-                        if (chatId) {
-                            updateSavedChatModel.mutate({
+                        if (!chatId) return;
+                        void Promise.all([
+                            setChatSlotModel.mutateAsync({
+                                chatId,
+                                slot: strongMode ? "strong" : "base",
+                                modelConfigId: modelConfig.id,
+                            }),
+                            updateSavedChatModel.mutateAsync({
                                 chatId,
                                 modelIds: [modelConfig.id],
-                            });
-                        } else {
-                            updateQuickChatModel.mutate({ modelConfig });
-                        }
+                            }),
+                        ]);
                         setIsPickerOpen(false);
                     }}
                 />
@@ -1136,10 +1132,21 @@ function MobileSettingsPanel({
     const mobileWebSearch = useMobileWebSearchToggle();
     const savedSystemPrompt = AppMetadataAPI.useMobileUserSystemPrompt();
     const setSystemPrompt = AppMetadataAPI.useSetMobileUserSystemPrompt();
+    const modelPreferences = AppMetadataAPI.useMobileModelPreferences();
+    const setModelPreferences =
+        AppMetadataAPI.useSetMobileModelPreferences();
+    const modelConfigsQuery = ModelsAPI.useModelConfigs();
+    const selectedQuickChatModel = ModelsAPI.useSelectedModelConfigQuickChat();
     const [openRouterKey, setOpenRouterKey] = useState(
         apiKeys?.openrouter ?? "",
     );
     const [systemPrompt, setSystemPromptDraft] = useState(savedSystemPrompt);
+    const [baseModelId, setBaseModelId] = useState(
+        modelPreferences.baseModelId ?? "",
+    );
+    const [strongModelId, setStrongModelId] = useState(
+        modelPreferences.strongModelId ?? "",
+    );
     const [isSaving, setIsSaving] = useState(false);
     const [isEditingSetting, setIsEditingSetting] = useState(false);
     const [connectionState, setConnectionState] = useState<
@@ -1157,6 +1164,31 @@ function MobileSettingsPanel({
     useEffect(() => {
         setSystemPromptDraft(savedSystemPrompt);
     }, [savedSystemPrompt]);
+
+    const openRouterModels = useMemo(
+        () => openRouterModelConfigs(modelConfigsQuery.data),
+        [modelConfigsQuery.data],
+    );
+    const preferredModels = preferredMobileModels(
+        openRouterModels,
+        selectedQuickChatModel.data ?? undefined,
+    );
+
+    useEffect(() => {
+        setBaseModelId(
+            modelPreferences.baseModelId ?? preferredModels.base?.id ?? "",
+        );
+        setStrongModelId(
+            modelPreferences.strongModelId ??
+                preferredModels.strong?.id ??
+                "",
+        );
+    }, [
+        modelPreferences.baseModelId,
+        modelPreferences.strongModelId,
+        preferredModels.base?.id,
+        preferredModels.strong?.id,
+    ]);
 
     useEffect(() => {
         const header = headerRef.current;
@@ -1296,6 +1328,12 @@ function MobileSettingsPanel({
                 },
             });
             await setSystemPrompt.mutateAsync(systemPrompt);
+            if (baseModelId && strongModelId) {
+                await setModelPreferences.mutateAsync({
+                    baseModelId,
+                    strongModelId,
+                });
+            }
 
             await skipOnboarding.mutateAsync();
             await queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
@@ -1319,8 +1357,11 @@ function MobileSettingsPanel({
         queryClient,
         dismissSettingsKeyboard,
         setSystemPrompt,
+        setModelPreferences,
         skipOnboarding,
         systemPrompt,
+        baseModelId,
+        strongModelId,
     ]);
 
     const hasOpenRouterKey = Boolean(apiKeys?.openrouter);
@@ -1443,7 +1484,40 @@ function MobileSettingsPanel({
                     </button>
                 </section>
 
-                {hasOpenRouterKey && <MobileModelSelect />}
+                {hasOpenRouterKey && (
+                    <section className="flex flex-col gap-4">
+                        <div>
+                            <div className={mobileSettingsType.section}>
+                                Model preferences
+                            </div>
+                            <p className={mobileSettingsType.supporting}>
+                                New chats start with Base. Use the chat switch
+                                when you need the Strong model.
+                            </p>
+                        </div>
+                        <MobileModelPreferenceSelect
+                            label="Base model"
+                            models={openRouterModels}
+                            selectedModelId={baseModelId}
+                            onSelect={(model) => setBaseModelId(model.id)}
+                        />
+                        <MobileModelPreferenceSelect
+                            label="Strong model"
+                            models={openRouterModels}
+                            selectedModelId={strongModelId}
+                            onSelect={(model) => setStrongModelId(model.id)}
+                        />
+                        {baseModelId &&
+                            strongModelId &&
+                            baseModelId === strongModelId && (
+                                <p className="text-sm leading-5 text-destructive">
+                                    Base and Strong use the same model. Choose a
+                                    different model for one slot if you want the
+                                    switch to change models.
+                                </p>
+                            )}
+                    </section>
+                )}
 
                 <section className="flex flex-col gap-2">
                     <div className="flex items-end justify-between gap-3">
@@ -1682,7 +1756,7 @@ function MobileHeader({
                         <MenuIcon className="size-5" />
                     )}
                 </button>
-                <MobileModelSelect compact chatId={chatId} />
+                <MobileChatModelControl chatId={chatId} />
                 <div className="flex shrink-0 items-center gap-2">
                     <button
                         type="button"
