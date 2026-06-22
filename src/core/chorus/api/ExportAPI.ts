@@ -85,7 +85,7 @@ function groupMessagesByTurns(messages: MessageRow[]): Turn[] {
     return Array.from(turnMap.values());
 }
 
-async function fetchExportData(chatId: string): Promise<ExportData> {
+export async function fetchExportData(chatId: string): Promise<ExportData> {
     const chat = await fetchChat(chatId);
     const messages = await fetchChatMessages(chatId);
     const turns = groupMessagesByTurns(messages);
@@ -98,11 +98,11 @@ async function fetchExportData(chatId: string): Promise<ExportData> {
     };
 }
 
-function formatAsJSON(data: ExportData): string {
+export function formatAsJSON(data: ExportData): string {
     return JSON.stringify(data, null, 2);
 }
 
-function formatAsMarkdown(data: ExportData): string {
+export function formatAsMarkdown(data: ExportData): string {
     let md = `# ${data.title}\n`;
     md += `Created: ${new Date(data.createdAt).toLocaleDateString()}\n\n`;
     md += `---\n\n`;
@@ -122,6 +122,45 @@ function formatAsMarkdown(data: ExportData): string {
     }
 
     return md;
+}
+
+function safeFileName(value: string) {
+    return (
+        value
+            .replace(/[\\/:*?"<>|]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 80) || "Chorus chat"
+    );
+}
+
+export async function shareChat(chatId: string): Promise<"shared" | "saved"> {
+    const data = await fetchExportData(chatId);
+    const name = safeFileName(data.title);
+    const markdown = new File([formatAsMarkdown(data)], `${name}.md`, {
+        type: "text/markdown",
+    });
+    const json = new File([formatAsJSON(data)], `${name}.json`, {
+        type: "application/json",
+    });
+
+    if (
+        typeof navigator.share === "function" &&
+        (!navigator.canShare ||
+            navigator.canShare({
+                files: [markdown, json],
+            }))
+    ) {
+        await navigator.share({
+            title: data.title,
+            text: "Chorus conversation",
+            files: [markdown, json],
+        });
+        return "shared";
+    }
+
+    await exportChatAsMarkdown(chatId);
+    return "saved";
 }
 
 export async function exportChatAsJSON(chatId: string): Promise<void> {

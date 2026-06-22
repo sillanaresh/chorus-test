@@ -17,6 +17,7 @@ import {
 } from "react-router-dom";
 import {
     ArrowLeftIcon,
+    BookHeartIcon,
     CircleCheckIcon,
     CircleXIcon,
     CheckIcon,
@@ -36,6 +37,8 @@ import {
     PlusIcon,
     RefreshCcwIcon,
     SearchIcon,
+    Share2Icon,
+    ShieldCheckIcon,
     SettingsIcon,
     SparklesIcon,
     StopCircleIcon,
@@ -67,6 +70,8 @@ import * as MessageAPI from "@core/chorus/api/MessageAPI";
 import * as ModelConfigChatAPI from "@core/chorus/api/ModelConfigChatAPI";
 import * as ModelsAPI from "@core/chorus/api/ModelsAPI";
 import * as ToolPermissionsAPI from "@core/chorus/api/ToolPermissionsAPI";
+import * as MemoryAPI from "@core/chorus/api/MemoryAPI";
+import * as ExportAPI from "@core/chorus/api/ExportAPI";
 
 const settingsManager = SettingsManager.getInstance();
 
@@ -116,8 +121,7 @@ function preferredMobileModels(
             const name = normalizedModelName(model);
             return terms.every((term) => name.includes(term));
         });
-    const base =
-        find("deepseek", "v4", "flash") ?? currentModel ?? models[0];
+    const base = find("deepseek", "v4", "flash") ?? currentModel ?? models[0];
     const strong =
         find("deepseek", "v4", "pro") ??
         models.find((model) => model.id !== base?.id) ??
@@ -202,9 +206,11 @@ function mobileChatList(chats: Chat[] | undefined, query = "") {
 function MobileChatSearch({
     value,
     onChange,
+    placeholder = "Search chats",
 }: {
     value: string;
     onChange: (value: string) => void;
+    placeholder?: string;
 }) {
     return (
         <div className="mobile-chat-search flex h-11 items-center gap-2 rounded-md bg-foreground/[0.055] px-3 transition-colors focus-within:bg-foreground/[0.075] focus-within:ring-1 focus-within:ring-foreground/15">
@@ -212,8 +218,8 @@ function MobileChatSearch({
             <input
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
-                placeholder="Search chats"
-                aria-label="Search chats"
+                placeholder={placeholder}
+                aria-label={placeholder}
                 className="mobile-chat-search-input min-w-0 flex-1 !border-0 !bg-transparent !p-0 text-base leading-6 !shadow-none !ring-0 outline-none placeholder:text-foreground/55 focus:!border-0 focus:!ring-0"
             />
             {value && (
@@ -294,6 +300,7 @@ function MobileChatActionsSheet({
     const togglePin = ChatAPI.useTogglePinChat();
     const [title, setTitle] = useState("");
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [isSharing, setIsSharing] = useState(false);
 
     useEffect(() => {
         setTitle(chat ? chatTitle(chat) : "");
@@ -316,7 +323,10 @@ function MobileChatActionsSheet({
     const titleChanged =
         trimmedTitle.length > 0 && trimmedTitle !== chatTitle(chat);
     const isPending =
-        renameChat.isPending || deleteChat.isPending || togglePin.isPending;
+        renameChat.isPending ||
+        deleteChat.isPending ||
+        togglePin.isPending ||
+        isSharing;
 
     const saveTitle = async () => {
         if (!titleChanged) return;
@@ -460,6 +470,44 @@ function MobileChatActionsSheet({
                             )}
                             <span className="font-medium">
                                 {chat.pinned ? "Unpin chat" : "Pin chat"}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            className="flex h-12 items-center gap-3 rounded-md px-3 text-left active:bg-muted"
+                            onClick={() => {
+                                setIsSharing(true);
+                                void ExportAPI.shareChat(chat.id)
+                                    .then((result) => {
+                                        if (result === "saved") {
+                                            toast.success(
+                                                "Conversation exported",
+                                            );
+                                        }
+                                        onClose();
+                                    })
+                                    .catch((error) => {
+                                        if (
+                                            error instanceof DOMException &&
+                                            error.name === "AbortError"
+                                        ) {
+                                            return;
+                                        }
+                                        console.error(error);
+                                        toast.error(
+                                            "Could not share conversation",
+                                        );
+                                    })
+                                    .finally(() => setIsSharing(false));
+                            }}
+                            disabled={isPending}
+                        >
+                            <Share2Icon className="size-5" />
+                            <span className="font-medium">
+                                {isSharing
+                                    ? "Preparing files..."
+                                    : "Share conversation"}
                             </span>
                         </button>
 
@@ -916,12 +964,7 @@ function MobileChatModelControl({ chatId }: { chatId?: string }) {
             chatId,
             modelIds: [activeModel.id],
         });
-    }, [
-        activeModel,
-        chatId,
-        savedChatModel.data,
-        updateSavedChatModel,
-    ]);
+    }, [activeModel, chatId, savedChatModel.data, updateSavedChatModel]);
 
     const toggleMode = async () => {
         if (!chatId || !baseModel || !strongModel) return;
@@ -1125,6 +1168,7 @@ function MobileSettingsPanel({
     onClose?: () => void;
     showClose?: boolean;
 }) {
+    const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { mode, setMode } = useTheme();
     const { data: apiKeys } = AppMetadataAPI.useApiKeys();
@@ -1133,13 +1177,13 @@ function MobileSettingsPanel({
     const savedSystemPrompt = AppMetadataAPI.useMobileUserSystemPrompt();
     const setSystemPrompt = AppMetadataAPI.useSetMobileUserSystemPrompt();
     const modelPreferences = AppMetadataAPI.useMobileModelPreferences();
-    const setModelPreferences =
-        AppMetadataAPI.useSetMobileModelPreferences();
+    const setModelPreferences = AppMetadataAPI.useSetMobileModelPreferences();
     const modelConfigsQuery = ModelsAPI.useModelConfigs();
     const selectedQuickChatModel = ModelsAPI.useSelectedModelConfigQuickChat();
     const [openRouterKey, setOpenRouterKey] = useState(
         apiKeys?.openrouter ?? "",
     );
+    const [openAIKey, setOpenAIKey] = useState(apiKeys?.openai ?? "");
     const [systemPrompt, setSystemPromptDraft] = useState(savedSystemPrompt);
     const [baseModelId, setBaseModelId] = useState(
         modelPreferences.baseModelId ?? "",
@@ -1152,6 +1196,14 @@ function MobileSettingsPanel({
     const [connectionState, setConnectionState] = useState<
         "idle" | "testing" | "success" | "error"
     >("idle");
+    const memorySettings = MemoryAPI.useMemorySettings();
+    const setMemorySettings = MemoryAPI.useSetMemorySettings();
+    const clearMemories = MemoryAPI.useClearMemories();
+    const [memoryEnabled, setMemoryEnabled] = useState(false);
+    const [memoryAutoLearn, setMemoryAutoLearn] = useState(false);
+    const [openAIConnectionState, setOpenAIConnectionState] = useState<
+        "idle" | "testing" | "success" | "error"
+    >("idle");
     const panelRef = useRef<HTMLDivElement>(null);
     const headerRef = useRef<HTMLDivElement>(null);
     const footerRef = useRef<HTMLDivElement>(null);
@@ -1160,6 +1212,17 @@ function MobileSettingsPanel({
         setOpenRouterKey(apiKeys?.openrouter ?? "");
         setConnectionState("idle");
     }, [apiKeys?.openrouter]);
+
+    useEffect(() => {
+        setOpenAIKey(apiKeys?.openai ?? "");
+        setOpenAIConnectionState("idle");
+    }, [apiKeys?.openai]);
+
+    useEffect(() => {
+        if (!memorySettings.data) return;
+        setMemoryEnabled(memorySettings.data.enabled);
+        setMemoryAutoLearn(memorySettings.data.autoLearn);
+    }, [memorySettings.data]);
 
     useEffect(() => {
         setSystemPromptDraft(savedSystemPrompt);
@@ -1179,9 +1242,7 @@ function MobileSettingsPanel({
             modelPreferences.baseModelId ?? preferredModels.base?.id ?? "",
         );
         setStrongModelId(
-            modelPreferences.strongModelId ??
-                preferredModels.strong?.id ??
-                "",
+            modelPreferences.strongModelId ?? preferredModels.strong?.id ?? "",
         );
     }, [
         modelPreferences.baseModelId,
@@ -1304,6 +1365,14 @@ function MobileSettingsPanel({
         setConnectionState(connected ? "success" : "error");
     }, [openRouterKey]);
 
+    const testOpenAIConnection = useCallback(async () => {
+        const trimmedKey = openAIKey.trim();
+        if (!trimmedKey) return;
+        setOpenAIConnectionState("testing");
+        const connected = await MemoryAPI.testOpenAIConnection(trimmedKey);
+        setOpenAIConnectionState(connected ? "success" : "error");
+    }, [openAIKey]);
+
     const saveOpenRouterKey = useCallback(async () => {
         dismissSettingsKeyboard();
         const trimmedKey = openRouterKey.trim();
@@ -1321,6 +1390,7 @@ function MobileSettingsPanel({
                 apiKeys: {
                     ...settings.apiKeys,
                     openrouter: trimmedKey,
+                    openai: openAIKey.trim() || undefined,
                 },
                 quickChat: {
                     ...settings.quickChat,
@@ -1334,6 +1404,10 @@ function MobileSettingsPanel({
                     strongModelId,
                 });
             }
+            await setMemorySettings.mutateAsync({
+                enabled: memoryEnabled,
+                autoLearn: memoryEnabled && memoryAutoLearn,
+            });
 
             await skipOnboarding.mutateAsync();
             await queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
@@ -1362,6 +1436,10 @@ function MobileSettingsPanel({
         systemPrompt,
         baseModelId,
         strongModelId,
+        openAIKey,
+        memoryEnabled,
+        memoryAutoLearn,
+        setMemorySettings,
     ]);
 
     const hasOpenRouterKey = Boolean(apiKeys?.openrouter);
@@ -1433,6 +1511,129 @@ function MobileSettingsPanel({
                             );
                         })}
                     </div>
+                </section>
+
+                <section className="flex flex-col gap-3">
+                    <div>
+                        <div className={mobileSettingsType.section}>Memory</div>
+                        <p className={mobileSettingsType.supporting}>
+                            Memories stay on this device. OpenAI receives only
+                            the text needed to extract or find relevant
+                            memories.
+                        </p>
+                    </div>
+                    <label
+                        className={mobileSettingsType.section}
+                        htmlFor="mobile-openai-key"
+                    >
+                        OpenAI API key
+                    </label>
+                    <input
+                        id="mobile-openai-key"
+                        value={openAIKey}
+                        onChange={(event) => {
+                            setOpenAIKey(event.target.value);
+                            setOpenAIConnectionState("idle");
+                        }}
+                        placeholder="sk-..."
+                        type="password"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        className={`h-11 rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-ring ${mobileSettingsType.control}`}
+                    />
+                    <button
+                        type="button"
+                        className={`flex h-11 items-center justify-center gap-2 rounded-md border bg-background active:bg-muted disabled:opacity-55 ${mobileSettingsType.control}`}
+                        onClick={() => void testOpenAIConnection()}
+                        disabled={
+                            !openAIKey.trim() ||
+                            openAIConnectionState === "testing"
+                        }
+                        aria-live="polite"
+                    >
+                        {openAIConnectionState === "testing" ? (
+                            <Loader2Icon className="size-4 animate-spin" />
+                        ) : openAIConnectionState === "success" ? (
+                            <CheckIcon className="size-4" />
+                        ) : openAIConnectionState === "error" ? (
+                            <XIcon className="size-4" />
+                        ) : (
+                            <ShieldCheckIcon className="size-4" />
+                        )}
+                        {openAIConnectionState === "testing"
+                            ? "Testing connection"
+                            : openAIConnectionState === "success"
+                              ? "Connected"
+                              : openAIConnectionState === "error"
+                                ? "Connection failed"
+                                : "Test OpenAI connection"}
+                    </button>
+                    <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
+                        <div className="min-w-0">
+                            <div className={mobileSettingsType.section}>
+                                Use memory
+                            </div>
+                            <div
+                                className={`mt-1 ${mobileSettingsType.supporting}`}
+                            >
+                                Use saved facts as context in new chats.
+                            </div>
+                        </div>
+                        <Switch
+                            checked={memoryEnabled}
+                            onCheckedChange={setMemoryEnabled}
+                            aria-label="Use memory"
+                            className="data-[state=checked]:bg-accent-800 data-[state=unchecked]:bg-muted-foreground/35"
+                        />
+                    </div>
+                    <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
+                        <div className="min-w-0">
+                            <div className={mobileSettingsType.section}>
+                                Learn automatically
+                            </div>
+                            <div
+                                className={`mt-1 ${mobileSettingsType.supporting}`}
+                            >
+                                Review user messages after a chat becomes idle.
+                            </div>
+                        </div>
+                        <Switch
+                            checked={memoryAutoLearn}
+                            onCheckedChange={setMemoryAutoLearn}
+                            disabled={!memoryEnabled || !openAIKey.trim()}
+                            aria-label="Learn memories automatically"
+                            className="data-[state=checked]:bg-accent-800 data-[state=unchecked]:bg-muted-foreground/35"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        className={`flex h-11 items-center justify-center gap-2 rounded-md border border-destructive/40 bg-background text-destructive active:bg-destructive/10 disabled:opacity-50 ${mobileSettingsType.control}`}
+                        onClick={() => {
+                            if (
+                                window.confirm(
+                                    "Delete every saved memory from this device?",
+                                )
+                            ) {
+                                void clearMemories
+                                    .mutateAsync()
+                                    .then(() =>
+                                        toast.success("All memories deleted"),
+                                    );
+                            }
+                        }}
+                        disabled={clearMemories.isPending}
+                    >
+                        <Trash2Icon className="size-4" />
+                        Clear all memories
+                    </button>
+                    <button
+                        type="button"
+                        className={`flex h-11 items-center justify-center gap-2 rounded-md border bg-background active:bg-muted ${mobileSettingsType.control}`}
+                        onClick={() => navigate("/privacy")}
+                    >
+                        <ShieldCheckIcon className="size-4" />
+                        Privacy and data
+                    </button>
                 </section>
 
                 <section className="flex flex-col gap-2">
@@ -1599,7 +1800,11 @@ function MobileSettingsPanel({
                         type="button"
                         className={`h-12 min-w-0 flex-1 rounded-md bg-primary px-4 text-background disabled:cursor-not-allowed disabled:opacity-60 ${mobileSettingsType.control}`}
                         onClick={() => void saveOpenRouterKey()}
-                        disabled={isSaving || setSystemPrompt.isPending}
+                        disabled={
+                            isSaving ||
+                            setSystemPrompt.isPending ||
+                            setMemorySettings.isPending
+                        }
                     >
                         {isSaving ? "Saving..." : "Save"}
                     </button>
@@ -2232,6 +2437,31 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     }, [messageSetsQuery.data]);
 
     useEffect(() => {
+        if (!chatId || (messageSetsQuery.data?.length ?? 0) === 0) return;
+        const idleTimer = window.setTimeout(
+            () => {
+                void MemoryAPI.queueImplicitMemoryJob(chatId).then(() =>
+                    MemoryAPI.processPendingMemoryJobs(),
+                );
+            },
+            30 * 60 * 1000,
+        );
+        return () => window.clearTimeout(idleTimer);
+    }, [chatId, messageSetsQuery.data]);
+
+    useEffect(() => {
+        const processWhenActive = () => {
+            if (document.visibilityState === "visible") {
+                void MemoryAPI.processPendingMemoryJobs();
+            }
+        };
+        processWhenActive();
+        document.addEventListener("visibilitychange", processWhenActive);
+        return () =>
+            document.removeEventListener("visibilitychange", processWhenActive);
+    }, []);
+
+    useEffect(() => {
         if (!chatId) return;
 
         let recoveryTimer: number | undefined;
@@ -2304,6 +2534,9 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
 
     const createNewChat = useCallback(async () => {
         if (chatId) {
+            void MemoryAPI.queueImplicitMemoryJob(chatId).then(() =>
+                MemoryAPI.processPendingMemoryJobs(),
+            );
             await discardDisposableChat.mutateAsync({ chatId });
         }
         const newChatId = await createNewChatMutation.mutateAsync({
@@ -2314,6 +2547,9 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
 
     const leaveChat = useCallback(async () => {
         if (chatId) {
+            void MemoryAPI.queueImplicitMemoryJob(chatId).then(() =>
+                MemoryAPI.processPendingMemoryJobs(),
+            );
             await discardDisposableChat.mutateAsync({ chatId });
         }
         navigate("/");
@@ -2513,14 +2749,24 @@ function MobileHome() {
                             </div>
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        className={mobileHeaderAction}
-                        onClick={() => navigate("/settings")}
-                        aria-label="Open settings"
-                    >
-                        <SettingsIcon className="size-6" strokeWidth={2} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            className={mobileHeaderAction}
+                            onClick={() => navigate("/memories")}
+                            aria-label="Open memories"
+                        >
+                            <BookHeartIcon className="size-5" strokeWidth={2} />
+                        </button>
+                        <button
+                            type="button"
+                            className={mobileHeaderAction}
+                            onClick={() => navigate("/settings")}
+                            aria-label="Open settings"
+                        >
+                            <SettingsIcon className="size-6" strokeWidth={2} />
+                        </button>
+                    </div>
                 </div>
                 <MobileChatSearch value={query} onChange={setQuery} />
             </header>
@@ -2588,6 +2834,191 @@ function MobileHome() {
     );
 }
 
+function MobileMemoriesRoute() {
+    const navigate = useNavigate();
+    const memoriesQuery = MemoryAPI.useMemories();
+    const deleteMemory = MemoryAPI.useDeleteMemory();
+    const [query, setQuery] = useState("");
+    const deferredQuery = useDeferredValue(query);
+    const memories = useMemo(() => {
+        const normalized = deferredQuery.trim().toLocaleLowerCase();
+        const all = memoriesQuery.data ?? [];
+        if (!normalized) return all;
+        return all.filter(
+            (memory) =>
+                memory.content.toLocaleLowerCase().includes(normalized) ||
+                memory.category.toLocaleLowerCase().includes(normalized),
+        );
+    }, [deferredQuery, memoriesQuery.data]);
+
+    return (
+        <div className="flex h-full flex-col bg-background mobile-safe-top">
+            <header className="shrink-0 border-b px-4 pb-3">
+                <div className="flex min-h-16 items-center gap-3">
+                    <button
+                        type="button"
+                        className={mobileIconButton}
+                        onClick={() => navigate("/")}
+                        aria-label="Back to chats"
+                    >
+                        <ArrowLeftIcon className="size-5" />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                        <h1 className={mobileType.screenTitle}>Memory</h1>
+                        <div className={mobileType.rowMeta}>
+                            {memoriesQuery.data?.length ?? 0} saved
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        className={mobileHeaderAction}
+                        onClick={() => navigate("/settings")}
+                        aria-label="Open memory settings"
+                    >
+                        <SettingsIcon className="size-5" />
+                    </button>
+                </div>
+                <MobileChatSearch
+                    value={query}
+                    onChange={setQuery}
+                    placeholder="Search memories"
+                />
+            </header>
+
+            <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                {memoriesQuery.isPending ? (
+                    <div className="flex flex-col gap-2">
+                        {[0, 1, 2].map((index) => (
+                            <div
+                                key={index}
+                                className="h-20 animate-pulse rounded-md bg-muted/60"
+                            />
+                        ))}
+                    </div>
+                ) : memories.length === 0 ? (
+                    <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+                        <BookHeartIcon className="size-8 text-accent-800" />
+                        <h2 className={`mt-4 ${mobileType.screenTitle}`}>
+                            {query ? "No matching memories" : "No memories yet"}
+                        </h2>
+                        <p
+                            className={`mt-2 ${mobileType.body} text-muted-foreground`}
+                        >
+                            {query
+                                ? "Try another word or clear the search."
+                                : 'Say "Remember that..." in a chat, or turn on automatic learning in Settings.'}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="flex flex-col divide-y">
+                        {memories.map((memory) => (
+                            <div
+                                key={memory.id}
+                                className="flex min-h-20 items-start gap-3 py-3"
+                            >
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                                            {memory.category}
+                                        </span>
+                                        <span className={mobileType.rowMeta}>
+                                            {memory.source === "explicit"
+                                                ? "You asked Chorus to remember"
+                                                : "Learned from a chat"}
+                                        </span>
+                                    </div>
+                                    <p className={`mt-2 ${mobileType.body}`}>
+                                        {memory.content}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="flex size-10 shrink-0 items-center justify-center rounded-full text-destructive active:bg-destructive/10"
+                                    onClick={() =>
+                                        void deleteMemory
+                                            .mutateAsync(memory)
+                                            .then(() =>
+                                                toast.success("Memory deleted"),
+                                            )
+                                    }
+                                    aria-label={`Delete memory: ${memory.content}`}
+                                >
+                                    <Trash2Icon className="size-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </main>
+        </div>
+    );
+}
+
+function MobilePrivacyRoute() {
+    const navigate = useNavigate();
+
+    return (
+        <div className="flex h-full flex-col bg-background mobile-safe-top">
+            <header className="flex min-h-16 shrink-0 items-center gap-3 border-b px-4">
+                <button
+                    type="button"
+                    className={mobileIconButton}
+                    onClick={() => navigate(-1)}
+                    aria-label="Back"
+                >
+                    <ArrowLeftIcon className="size-5" />
+                </button>
+                <h1 className={mobileType.screenTitle}>Privacy and data</h1>
+            </header>
+            <main className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+                <div className="mx-auto flex max-w-2xl flex-col gap-6">
+                    <section>
+                        <h2 className={mobileType.label}>
+                            Stored on your device
+                        </h2>
+                        <p className={`mt-2 ${mobileType.body}`}>
+                            Chorus stores chats, drafts, settings, attachments,
+                            model choices, and memories in the app container on
+                            this device. Chorus does not require a Chorus
+                            account or a Chorus chat server.
+                        </p>
+                    </section>
+                    <section>
+                        <h2 className={mobileType.label}>Model providers</h2>
+                        <p className={`mt-2 ${mobileType.body}`}>
+                            When you send a chat message, Chorus sends that
+                            request and its needed conversation context to the
+                            provider you selected. The iPhone chat flow uses
+                            OpenRouter. Provider terms and retention rules apply
+                            to those requests.
+                        </p>
+                    </section>
+                    <section>
+                        <h2 className={mobileType.label}>Memory</h2>
+                        <p className={`mt-2 ${mobileType.body}`}>
+                            Memory is off until you enable it. When enabled,
+                            Chorus may send selected user text to OpenAI to
+                            extract durable facts and create search embeddings.
+                            Saved memories remain in the local database. You can
+                            inspect and delete them at any time.
+                        </p>
+                    </section>
+                    <section>
+                        <h2 className={mobileType.label}>Deletion</h2>
+                        <p className={`mt-2 ${mobileType.body}`}>
+                            Delete individual chats or memories from their
+                            management screens. Use Clear all memories in
+                            Settings to remove every saved memory. Removing the
+                            app deletes its local app container from the device,
+                            subject to any device backup you control.
+                        </p>
+                    </section>
+                </div>
+            </main>
+        </div>
+    );
+}
+
 function MobileSettingsRoute() {
     const navigate = useNavigate();
 
@@ -2623,6 +3054,8 @@ export default function MobileApp() {
                     }
                 />
                 <Route path="/settings" element={<MobileSettingsRoute />} />
+                <Route path="/memories" element={<MobileMemoriesRoute />} />
+                <Route path="/privacy" element={<MobilePrivacyRoute />} />
                 <Route path="*" element={<MobileHome />} />
             </Routes>
 

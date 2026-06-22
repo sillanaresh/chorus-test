@@ -50,6 +50,7 @@ import * as ModelsAPI from "@core/chorus/api/ModelsAPI";
 import * as DraftAPI from "@core/chorus/api/DraftAPI";
 import * as ModelConfigChatAPI from "@core/chorus/api/ModelConfigChatAPI";
 import * as ProjectAPI from "@core/chorus/api/ProjectAPI";
+import * as MemoryAPI from "@core/chorus/api/MemoryAPI";
 
 const DEFAULT_CHAT_INPUT_ID = "default-chat-input";
 const REPLY_CHAT_INPUT_ID = "reply-chat-input";
@@ -358,6 +359,29 @@ export function ChatInput({
             if (!userMessageResult) {
                 console.error("couldn't insert user message");
                 return;
+            }
+
+            if (isMobileApp) {
+                void MemoryAPI.rememberExplicitMessage({
+                    text: userMessageText,
+                    chatId,
+                    messageId: userMessageResult.messageId,
+                })
+                    .then((memory) => {
+                        if (!memory) return;
+                        toast.success("Remembered", {
+                            description: memory.content,
+                            action: {
+                                label: "Undo",
+                                onClick: () => {
+                                    void MemoryAPI.deleteMemory(memory);
+                                },
+                            },
+                        });
+                    })
+                    .catch((error) => {
+                        console.warn("Could not save explicit memory", error);
+                    });
             }
 
             // Check if this is the first message and trigger animation

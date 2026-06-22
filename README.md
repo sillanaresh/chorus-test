@@ -42,6 +42,8 @@ The iOS app keeps the main chat flow focused on small screens.
 -   Start chats and stream model responses.
 -   Search and manage local chat history.
 -   Rename, pin, and delete chats.
+-   Share a conversation as readable Markdown and structured JSON through the iOS share sheet.
+-   Save personal memories across chats, inspect every saved item, and delete items at any time.
 -   Use the same Chorus message styling as the desktop app.
 -   Recover cleanly when iOS interrupts a response after the app moves to the background.
 
@@ -54,6 +56,18 @@ The iOS Settings screen provides two model preferences. Base is the default for 
 Each new chat copies the current Settings choices into its own Base and Strong slots. The user can then open the model picker and assign any available OpenRouter model to the active slot. These chat-level changes do not alter the global defaults.
 
 The sparkle button switches slots without clearing the conversation. Each chat remembers its active slot and its two model choices. If both Settings slots use the same model, Chorus displays a warning but still allows the user to save.
+
+### Personal memory
+
+Memory is local and disabled by default. The user can add an OpenAI API key and enable Memory in Settings. A message such as "Remember that I am allergic to shellfish" creates an explicit memory. Explicit corrections replace a memory with the same stable fact key.
+
+Automatic learning is a separate opt-in setting. When enabled, Chorus queues a conversation for review after it becomes idle or the user leaves the chat. iOS may suspend the app before that work finishes, so pending work resumes the next time the app is active.
+
+For a new conversation, Chorus finds a small set of relevant memories and adds them to the selected model's system context. It stores the memory text, categories, embeddings, deletion records, and chat links in SQLite. Deleted memories leave a local tombstone so automatic learning does not recreate the same fact.
+
+The Memory screen lists everything Chorus has stored. The user can search the list and delete any item. The Settings screen can delete all memories.
+
+See [PRIVACY.md](PRIVACY.md) for the current data handling summary.
 
 ### Desktop experience
 
@@ -124,7 +138,7 @@ The Rust code under `src-tauri/src` starts the Tauri application and registers n
 
 ### Data storage
 
-Chorus uses SQLite for structured application data. This includes conversation history, projects, model settings, permissions, drafts, attachment records, and cost data.
+Chorus uses SQLite for structured application data. This includes conversation history, projects, model settings, permissions, drafts, attachment records, cost data, personal memories, memory deletion records, and pending memory work.
 
 Uploaded files and generated files are stored in the application data directory. See [DATA_STORAGE.md](DATA_STORAGE.md) for platform paths and backup instructions. See [SCHEMA.md](SCHEMA.md) for the generated database schema.
 
@@ -203,7 +217,19 @@ A physical device build requires an Apple development team and valid signing set
 
 ## Configuration
 
-Provider keys are added in the application settings. The mobile app currently uses OpenRouter for its model list and chat flow. The desktop app supports the broader provider and local model set.
+Provider keys are added in the application settings. The mobile app currently uses OpenRouter for its model list and chat flow. The optional memory feature uses OpenAI for structured extraction and embeddings. The desktop app supports the broader provider and local model set.
+
+## App Store release notes
+
+The iOS bundle is self-contained and does not need a local development server. Before an App Store submission, the developer still needs to:
+
+-   Join the Apple Developer Program and configure distribution signing.
+-   Add a public support URL and replace the contact placeholder in [PRIVACY.md](PRIVACY.md).
+-   Publish the privacy policy at a public URL and add that URL in App Store Connect.
+-   Complete the App Privacy answers for chat content sent to OpenRouter and memory text sent to OpenAI.
+-   Provide App Review with working test provider keys or an approved full demo mode.
+-   Decide how the public product handles provider costs. Do not link users to an external API credit purchase flow from the app without checking the current App Review payment rules.
+-   Run TestFlight testing on real iPhones before submitting the production build.
 
 The main Tauri configuration is in `src-tauri/tauri.conf.json`. Mobile overrides are in `src-tauri/tauri.ios.conf.json`.
 

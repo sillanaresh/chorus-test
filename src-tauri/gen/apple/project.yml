@@ -51,8 +51,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.15.1
-        CFBundleVersion: "0.15.1"
+        CFBundleShortVersionString: 0.16.0
+        CFBundleVersion: "0.16.0"
     entitlements:
       path: chorus_iOS/chorus_iOS.entitlements
     scheme:

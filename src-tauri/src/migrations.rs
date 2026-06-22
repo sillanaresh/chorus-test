@@ -2554,5 +2554,61 @@ You have full access to bash commands on the user''''s computer. If you write a 
                 UPDATE projects SET total_cost_usd = 0.0 WHERE total_cost_usd IS NULL;
             "#,
         },
+        Migration {
+            version: 139,
+            description: "add local personal memory tables",
+            kind: MigrationKind::Up,
+            sql: r#"
+                CREATE TABLE IF NOT EXISTS memories (
+                    id TEXT PRIMARY KEY,
+                    normalized_key TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    category TEXT NOT NULL DEFAULT 'General',
+                    source TEXT NOT NULL CHECK (source IN ('explicit', 'implicit')),
+                    source_chat_id TEXT,
+                    source_message_id TEXT,
+                    confidence REAL NOT NULL DEFAULT 1.0,
+                    embedding_json TEXT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_normalized_key
+                    ON memories(normalized_key);
+                CREATE INDEX IF NOT EXISTS idx_memories_updated_at
+                    ON memories(updated_at DESC);
+
+                CREATE TABLE IF NOT EXISTS memory_tombstones (
+                    normalized_key TEXT PRIMARY KEY,
+                    deleted_content TEXT NOT NULL,
+                    deleted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS memory_chat_links (
+                    chat_id TEXT NOT NULL,
+                    memory_id TEXT NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (chat_id, memory_id),
+                    FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+                    FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS memory_jobs (
+                    chat_id TEXT PRIMARY KEY,
+                    transcript_hash TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending', 'running', 'complete', 'failed')),
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+                );
+
+                INSERT OR IGNORE INTO app_metadata (key, value)
+                    VALUES ('memory_enabled', 'false');
+                INSERT OR IGNORE INTO app_metadata (key, value)
+                    VALUES ('memory_auto_learn', 'false');
+            "#,
+        },
     ];
 }

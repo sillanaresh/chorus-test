@@ -61,6 +61,7 @@ import {
     fetchModelConfigById,
 } from "./ModelsAPI";
 import { Attachment, AttachmentDBRow, readAttachment } from "./AttachmentsAPI";
+import { memoryContextForChat } from "./MemoryAPI";
 
 // Query keys objects are based on https://tkdodo.eu/blog/effective-react-query-keys
 // although also consider this approach: https://tkdodo.eu/blog/leveraging-the-query-function-context
@@ -2602,6 +2603,27 @@ function useStreamToolsMessage() {
                     ...projectContext,
                     ...llmConversation(previousMessageSetsPlusThisMessage),
                 ];
+                const latestUserMessage = [...conversation]
+                    .reverse()
+                    .find((message) => message.role === "user");
+                const memoryContext =
+                    level === 0 && latestUserMessage?.role === "user"
+                        ? await memoryContextForChat(
+                              chatId,
+                              latestUserMessage.content,
+                          )
+                        : undefined;
+                const modelConfigWithMemory = memoryContext
+                    ? {
+                          ...modelConfig,
+                          systemPrompt: [
+                              modelConfig.systemPrompt?.trim(),
+                              memoryContext,
+                          ]
+                              .filter(Boolean)
+                              .join("\n\n"),
+                      }
+                    : modelConfig;
 
                 console.log(`[level ${level}] streaming ai message`);
                 await createMessagePart.mutateAsync({
@@ -2634,7 +2656,7 @@ function useStreamToolsMessage() {
                     messageId,
                     partLevel: level,
                     conversation,
-                    modelConfig,
+                    modelConfig: modelConfigWithMemory,
                     streamingToken,
                     tools,
                 });
