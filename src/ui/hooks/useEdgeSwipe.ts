@@ -7,12 +7,14 @@ type SwipeHandlers = {
 };
 
 /**
- * Detects a horizontal swipe that begins near the left edge of the screen and
- * moves to the right, the standard iOS gesture for revealing a navigation
- * drawer. Returns touch handlers to spread onto the element that should listen.
+ * Detects a left-to-right horizontal swipe and fires `onSwipeRight`, the
+ * standard gesture for revealing a navigation drawer. Returns touch handlers to
+ * spread onto the element that should listen.
  *
- * Edge detection (the swipe must start within `edgeWidth` px of the left) keeps
- * this from interfering with vertical scrolling or taps elsewhere on screen.
+ * The swipe must start within `edgeWidth` px of the left. Pass a large value
+ * (e.g. Infinity) to allow the gesture to start anywhere on screen. The
+ * vertical-abort and `threshold` checks keep it from interfering with vertical
+ * scrolling or small horizontal jitter.
  */
 export function useEdgeSwipe({
     onSwipeRight,

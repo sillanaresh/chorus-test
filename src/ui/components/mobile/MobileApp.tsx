@@ -98,6 +98,9 @@ const mobileSettingsType = {
 const mobileSettingsCategory =
     "px-1 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground";
 
+// iOS-style inset grouped card that visually bundles a category's controls.
+const mobileSettingsCard = "rounded-xl border bg-foreground/[0.03] p-3";
+
 const mobileIconButton =
     "flex size-10 shrink-0 items-center justify-center rounded-full active:bg-muted";
 const mobileHeaderAction =
@@ -1478,8 +1481,9 @@ function MobileSettingsPanel({
             </div>
 
             <div className="mobile-settings-scroll flex flex-col gap-8 overflow-y-auto px-4 py-5">
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
                     <div className={mobileSettingsCategory}>Appearance</div>
+                    <div className={mobileSettingsCard}>
                 <section className="flex flex-col gap-2">
                     <div className="grid grid-cols-3 gap-2">
                         {[
@@ -1518,10 +1522,12 @@ function MobileSettingsPanel({
                         })}
                     </div>
                 </section>
+                    </div>
                 </div>
 
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
                     <div className={mobileSettingsCategory}>Memory</div>
+                    <div className={mobileSettingsCard}>
                 <section className="flex flex-col gap-3">
                     <div>
                         <p className={mobileSettingsType.supporting}>
@@ -1643,10 +1649,12 @@ function MobileSettingsPanel({
                         Privacy and data
                     </button>
                 </section>
+                    </div>
                 </div>
 
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
                     <div className={mobileSettingsCategory}>Models &amp; Chat</div>
+                    <div className={mobileSettingsCard}>
                 <section className="flex flex-col gap-2">
                     <label
                         className={mobileSettingsType.section}
@@ -1791,6 +1799,7 @@ function MobileSettingsPanel({
                         />
                     </section>
                 )}
+                    </div>
                 </div>
             </div>
 
@@ -2418,7 +2427,13 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
 
     // Swipe from the left edge to the right to reveal the chat list, the
     // standard iOS drawer gesture.
-    const chatListSwipe = useEdgeSwipe({ onSwipeRight: onOpenChats });
+    // Open the chat list on a left-to-right swipe that can start anywhere on
+    // the screen (like ChatGPT / Claude), not just from the very left edge.
+    const chatListSwipe = useEdgeSwipe({
+        onSwipeRight: onOpenChats,
+        edgeWidth: Number.POSITIVE_INFINITY,
+        threshold: 64,
+    });
 
     const isLoading =
         chatQuery.isPending || messageSetsQuery.isPending || !chatId;
