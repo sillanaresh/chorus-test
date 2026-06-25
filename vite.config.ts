@@ -86,6 +86,15 @@ export default defineConfig(async ({ command }) => ({
     build: {
         target: ["safari15"], // add chrome105 if we add windows support
     },
+    esbuild: {
+        // Strip debug logging from production builds for a smaller, quieter
+        // bundle. warn/error are kept so real problems still surface. Dev
+        // builds keep all logging.
+        pure:
+            command === "build"
+                ? ["console.log", "console.debug", "console.info"]
+                : [],
+    },
 
     // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
     //
