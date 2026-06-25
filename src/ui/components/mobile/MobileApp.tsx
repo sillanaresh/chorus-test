@@ -55,6 +55,7 @@ import { ProviderLogo } from "@ui/components/ui/provider-logo";
 import { Switch } from "@ui/components/ui/switch";
 import { MessageMarkdown } from "@ui/components/renderers/MessageMarkdown";
 import { useTheme } from "@ui/hooks/useTheme";
+import { useEdgeSwipe } from "@ui/hooks/useEdgeSwipe";
 import type { MouseTrackingEyeRef } from "@ui/components/MouseTrackingEye";
 import { SettingsManager } from "@core/utilities/Settings";
 import { getProviderName, type ModelConfig } from "@core/chorus/Models";
@@ -92,6 +93,10 @@ const mobileSettingsType = {
     control: "text-base font-medium leading-6",
     supporting: "text-sm font-normal leading-5 text-muted-foreground",
 } as const;
+
+// iOS-style grouped settings category header.
+const mobileSettingsCategory =
+    "px-1 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground";
 
 const mobileIconButton =
     "flex size-10 shrink-0 items-center justify-center rounded-full active:bg-muted";
@@ -1472,9 +1477,10 @@ function MobileSettingsPanel({
                 )}
             </div>
 
-            <div className="mobile-settings-scroll flex flex-col gap-6 overflow-y-auto px-4 py-5">
+            <div className="mobile-settings-scroll flex flex-col gap-8 overflow-y-auto px-4 py-5">
+                <div className="flex flex-col gap-4">
+                    <div className={mobileSettingsCategory}>Appearance</div>
                 <section className="flex flex-col gap-2">
-                    <div className={mobileSettingsType.section}>Appearance</div>
                     <div className="grid grid-cols-3 gap-2">
                         {[
                             {
@@ -1512,10 +1518,12 @@ function MobileSettingsPanel({
                         })}
                     </div>
                 </section>
+                </div>
 
+                <div className="flex flex-col gap-4">
+                    <div className={mobileSettingsCategory}>Memory</div>
                 <section className="flex flex-col gap-3">
                     <div>
-                        <div className={mobileSettingsType.section}>Memory</div>
                         <p className={mobileSettingsType.supporting}>
                             Memories stay on this device. OpenAI receives only
                             the text needed to extract or find relevant
@@ -1635,7 +1643,10 @@ function MobileSettingsPanel({
                         Privacy and data
                     </button>
                 </section>
+                </div>
 
+                <div className="flex flex-col gap-4">
+                    <div className={mobileSettingsCategory}>Models &amp; Chat</div>
                 <section className="flex flex-col gap-2">
                     <label
                         className={mobileSettingsType.section}
@@ -1780,6 +1791,7 @@ function MobileSettingsPanel({
                         />
                     </section>
                 )}
+                </div>
             </div>
 
             <div
@@ -1842,10 +1854,51 @@ function MobileChatListSheet({
         onClose();
     }, [onClose, openNewChat]);
 
+    // Slide the drawer in from the left when it opens.
+    const [entered, setEntered] = useState(false);
+    const swipeStart = useRef<{ x: number; y: number } | null>(null);
+
+    useEffect(() => {
+        if (!open) {
+            setEntered(false);
+            return;
+        }
+        const frame = requestAnimationFrame(() => setEntered(true));
+        return () => cancelAnimationFrame(frame);
+    }, [open]);
+
+    const handleSheetTouchStart = (event: React.TouchEvent) => {
+        if (event.touches.length !== 1) {
+            swipeStart.current = null;
+            return;
+        }
+        const touch = event.touches[0];
+        swipeStart.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const handleSheetTouchEnd = (event: React.TouchEvent) => {
+        const start = swipeStart.current;
+        swipeStart.current = null;
+        if (!start) return;
+        const touch = event.changedTouches[0];
+        const dx = touch.clientX - start.x;
+        const dy = touch.clientY - start.y;
+        // Swipe left to dismiss the drawer.
+        if (dx <= -64 && Math.abs(dx) > Math.abs(dy)) {
+            onClose();
+        }
+    };
+
     if (!open) return null;
 
     return (
-        <div className="fixed inset-0 z-40 bg-background">
+        <div
+            className={`fixed inset-0 z-40 bg-background transition-transform duration-300 ease-out will-change-transform ${
+                entered ? "translate-x-0" : "-translate-x-full"
+            }`}
+            onTouchStart={handleSheetTouchStart}
+            onTouchEnd={handleSheetTouchEnd}
+        >
             <div className="flex h-full flex-col mobile-safe-top">
                 <header className="shrink-0 border-b px-4 pb-3">
                     <div className="flex min-h-14 items-center justify-between">
@@ -2363,6 +2416,10 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     } | null>(null);
     const [isLoadSlow, setIsLoadSlow] = useState(false);
 
+    // Swipe from the left edge to the right to reveal the chat list, the
+    // standard iOS drawer gesture.
+    const chatListSwipe = useEdgeSwipe({ onSwipeRight: onOpenChats });
+
     const isLoading =
         chatQuery.isPending || messageSetsQuery.isPending || !chatId;
     const modelConfigsById = useMemo(
@@ -2650,7 +2707,12 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     const isNewChat = chatQuery.data?.isNewChat || messageSets.length === 0;
 
     return (
-        <div className="mobile-app-shell flex h-full flex-col bg-background">
+        <div
+            className="mobile-app-shell flex h-full flex-col bg-background"
+            onTouchStart={chatListSwipe.onTouchStart}
+            onTouchMove={chatListSwipe.onTouchMove}
+            onTouchEnd={chatListSwipe.onTouchEnd}
+        >
             <MobileHeader
                 chat={chatQuery.data}
                 onBack={() => void leaveChat()}
