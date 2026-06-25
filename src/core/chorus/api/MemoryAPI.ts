@@ -4,10 +4,45 @@ import { v4 as uuidv4 } from "uuid";
 import { db } from "../DB";
 import { getApiKeys } from "./AppMetadataAPI";
 
-const MEMORY_MODEL = "gpt-5.4-nano";
+// Extraction model. gpt-4o-mini is far more faithful than a nano model at
+// deciding what is worth remembering and at not mangling the user's words,
+// while still costing well under a cent per conversation.
+const MEMORY_MODEL = "gpt-4o-mini";
 const EMBEDDING_MODEL = "text-embedding-3-small";
-const MAX_MEMORY_CONTEXT_ITEMS = 5;
-const MAX_MEMORY_CONTEXT_CHARS = 1600;
+
+// How many memories we inject as context, and the character budget for them.
+const MAX_MEMORY_CONTEXT_ITEMS = 8;
+const MAX_MEMORY_CONTEXT_CHARS = 2400;
+
+// Implicit (auto-learned) memories below this confidence are dropped. Kept
+// permissive so useful context about projects and goals survives.
+const IMPLICIT_MIN_CONFIDENCE = 0.5;
+
+// When a freshly extracted memory is at least this cosine-similar to an
+// existing one, update that memory in place instead of storing a near-duplicate.
+const DEDUPE_SIMILARITY = 0.86;
+
+// Shared guidance for the extraction model, modelled on how ChatGPT / Claude
+// decide what is worth remembering across conversations.
+const MEMORY_GUIDELINES = `You maintain a long-term memory about the user, like the memory feature in ChatGPT or Claude. You read a conversation and decide what is worth remembering for future conversations.
+
+Remember things that stay useful over time:
+- Identity and background: name, role, location, languages.
+- Preferences and style: how they like answers, tone, tools, formats.
+- Projects and goals: what they are building or working toward, and its status.
+- Skills, tech stack, and tools they use.
+- Relationships and important people.
+- Constraints, requirements, and strong opinions.
+
+Do NOT remember:
+- One-off task details, transient state, or the contents of a single answer.
+- Weather, meals, moods, or anything that changes day to day.
+- The assistant's own statements, guesses, or suggestions about the user.
+- Sensitive data (health, finances, credentials) unless the user clearly shares it as lasting context.
+
+Write each memory as a clear, self-contained sentence in the third person about the user, for example: "The user is building a native iOS port of Chorus and wants a stronger personal memory layer." Keep the meaningful detail; do not over-compress.
+
+Use a stable snake_case key such as home_location, preferred_writing_style, current_job, active_project, or tech_stack. An update or correction must reuse the key of the fact it replaces. Category must be one of: Personal, Preferences, Work, Projects, Relationships, Health, General. confidence is 0-1 for how durable and certain the memory is.`;
 
 export type MemorySource = "explicit" | "implicit";
 
@@ -138,10 +173,10 @@ async function extractMemories(
     text: string,
     source: MemorySource,
 ): Promise<ExtractedMemory[]> {
-    const instruction =
+    const intro =
         source === "explicit"
-            ? "The user asked to save or correct a memory. Preserve their meaning. Return one concise durable fact. A correction must use the same stable key as the fact it replaces."
-            : "Extract only durable facts that are likely to remain useful for weeks. Ignore temporary events, weather, meals, guesses, assistant claims, and sensitive facts unless the user clearly chose to share them as lasting context. When unsure, return no memories.";
+            ? "The user explicitly asked you to remember or correct something. Capture exactly what they mean, as a single memory. A correction must reuse the key of the fact it replaces."
+            : "Review the conversation and record everything worth remembering for future conversations. Return an empty list if nothing qualifies.";
 
     const response = await openAIRequest<{
         choices: Array<{ message: { content: string | null } }>;
@@ -150,8 +185,7 @@ async function extractMemories(
         messages: [
             {
                 role: "system",
-                content: `${instruction}
-Use a stable snake_case key such as home_location, food_allergy, preferred_writing_style, current_job, or active_project_name. Categories should be one of Personal, Preferences, Work, Projects, Relationships, Health, or General.`,
+                content: `${intro}\n\n${MEMORY_GUIDELINES}`,
             },
             { role: "user", content: text },
         ],
@@ -166,7 +200,7 @@ Use a stable snake_case key such as home_location, food_allergy, preferred_writi
                     properties: {
                         memories: {
                             type: "array",
-                            maxItems: source === "explicit" ? 1 : 6,
+                            maxItems: source === "explicit" ? 1 : 10,
                             items: {
                                 type: "object",
                                 additionalProperties: false,
@@ -209,7 +243,8 @@ Use a stable snake_case key such as home_location, food_allergy, preferred_writi
             (memory) =>
                 memory.key &&
                 memory.content &&
-                (source === "explicit" || memory.confidence >= 0.78),
+                (source === "explicit" ||
+                    memory.confidence >= IMPLICIT_MIN_CONFIDENCE),
         );
 }
 
@@ -237,6 +272,46 @@ async function saveExtractedMemory({
     }
 
     const embedding = await createEmbedding(memory.content);
+
+    // If this is essentially the same as an existing memory (the user restated
+    // or evolved a fact), update that one in place instead of storing a
+    // near-duplicate under a different key. The newest phrasing wins.
+    if (embedding) {
+        const candidates = await db.select<MemoryRow[]>(
+            "SELECT * FROM memories WHERE embedding_json IS NOT NULL",
+        );
+        let best: { row: MemoryRow; score: number } | undefined;
+        for (const row of candidates) {
+            if (row.normalized_key === memory.key || !row.embedding_json) {
+                continue;
+            }
+            const existingEmbedding = JSON.parse(row.embedding_json) as number[];
+            const score = cosineSimilarity(embedding, existingEmbedding);
+            if (!best || score > best.score) {
+                best = { row, score };
+            }
+        }
+        if (best && best.score >= DEDUPE_SIMILARITY) {
+            await db.execute(
+                `UPDATE memories SET
+                    content = ?, category = ?, confidence = ?, embedding_json = ?,
+                    source_chat_id = ?, source_message_id = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [
+                    memory.content,
+                    memory.category || "General",
+                    Math.max(memory.confidence, best.row.confidence),
+                    JSON.stringify(embedding),
+                    chatId ?? best.row.source_chat_id,
+                    messageId ?? best.row.source_message_id,
+                    best.row.id,
+                ],
+            );
+            return best.row.id;
+        }
+    }
+
     const existing = await db.select<{ id: string }[]>(
         "SELECT id FROM memories WHERE normalized_key = ?",
         [memory.key],
@@ -336,6 +411,30 @@ async function chatUserTranscript(chatId: string) {
     return rows.map((row) => row.text.trim()).join("\n");
 }
 
+/**
+ * Builds a role-labelled transcript including the selected assistant replies.
+ * The assistant turn often states the user's goal most clearly, so giving the
+ * extractor both sides produces much better memories than user text alone.
+ */
+async function chatTranscriptForMemory(chatId: string) {
+    const rows = await db.select<{ text: string; model: string }[]>(
+        `SELECT messages.text, messages.model
+         FROM messages
+         JOIN message_sets ON message_sets.id = messages.message_set_id
+         WHERE messages.chat_id = ?
+           AND length(trim(messages.text)) > 0
+           AND (messages.model = 'user' OR messages.selected = 1)
+         ORDER BY message_sets.level ASC`,
+        [chatId],
+    );
+    return rows
+        .map((row) => {
+            const who = row.model === "user" ? "User" : "Assistant";
+            return `${who}: ${row.text.trim()}`;
+        })
+        .join("\n");
+}
+
 function simpleHash(value: string) {
     let hash = 2166136261;
     for (let index = 0; index < value.length; index += 1) {
@@ -392,11 +491,12 @@ export async function processPendingMemoryJobs() {
             [job.chat_id],
         );
         try {
-            const transcript = await chatUserTranscript(job.chat_id);
-            if (simpleHash(transcript) !== job.transcript_hash) {
+            const userTranscript = await chatUserTranscript(job.chat_id);
+            if (simpleHash(userTranscript) !== job.transcript_hash) {
                 await queueImplicitMemoryJob(job.chat_id);
                 continue;
             }
+            const transcript = await chatTranscriptForMemory(job.chat_id);
             const extracted = await extractMemories(transcript, "implicit");
             for (const memory of extracted) {
                 await saveExtractedMemory({
@@ -458,53 +558,44 @@ export async function memoryContextForChat(
     const settings = await fetchMemorySettings();
     if (!settings.enabled) return undefined;
 
-    const linked = await db.select<MemoryRow[]>(
-        `SELECT memories.*
-         FROM memory_chat_links
-         JOIN memories ON memories.id = memory_chat_links.memory_id
-         WHERE memory_chat_links.chat_id = ?
-         ORDER BY memory_chat_links.created_at ASC`,
-        [chatId],
+    // Rank ALL memories against the current message every turn. (Previously the
+    // first set of matched memories was cached per chat and reused, so later
+    // questions kept seeing stale, irrelevant memories.)
+    const all = await db.select<MemoryRow[]>(
+        "SELECT * FROM memories ORDER BY updated_at DESC",
     );
-    let memories = linked;
+    if (all.length === 0) return undefined;
 
-    if (memories.length === 0) {
-        const all = await db.select<MemoryRow[]>(
-            `SELECT * FROM memories
-             WHERE source_chat_id IS NULL OR source_chat_id <> ?
-             ORDER BY updated_at DESC`,
-            [chatId],
-        );
-        const queryEmbedding = settings.hasOpenAIKey
-            ? await createEmbedding(query)
-            : undefined;
-        memories = all
-            .map((row) => {
-                const embedding = row.embedding_json
-                    ? (JSON.parse(row.embedding_json) as number[])
-                    : undefined;
-                const semantic =
-                    queryEmbedding && embedding
-                        ? cosineSimilarity(queryEmbedding, embedding)
-                        : 0;
-                const lexical = lexicalScore(query, row.content);
-                return { row, score: semantic * 0.8 + lexical * 0.2 };
-            })
-            .filter(({ score }) => score >= 0.18)
-            .sort((a, b) => b.score - a.score)
-            .slice(0, MAX_MEMORY_CONTEXT_ITEMS)
-            .map(({ row }) => row);
-
-        for (const memory of memories) {
-            await db.execute(
-                `INSERT OR IGNORE INTO memory_chat_links (chat_id, memory_id)
-                 VALUES (?, ?)`,
-                [chatId, memory.id],
-            );
-        }
-    }
+    const queryEmbedding = settings.hasOpenAIKey
+        ? await createEmbedding(query)
+        : undefined;
+    const memories = all
+        .map((row) => {
+            const embedding = row.embedding_json
+                ? (JSON.parse(row.embedding_json) as number[])
+                : undefined;
+            const semantic =
+                queryEmbedding && embedding
+                    ? cosineSimilarity(queryEmbedding, embedding)
+                    : 0;
+            const lexical = lexicalScore(query, row.content);
+            return { row, score: semantic * 0.8 + lexical * 0.2 };
+        })
+        .filter(({ score }) => score >= 0.12)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, MAX_MEMORY_CONTEXT_ITEMS)
+        .map(({ row }) => row);
 
     if (memories.length === 0) return undefined;
+
+    // Record which memories were used so the chat can show provenance later.
+    for (const memory of memories) {
+        await db.execute(
+            `INSERT OR IGNORE INTO memory_chat_links (chat_id, memory_id)
+             VALUES (?, ?)`,
+            [chatId, memory.id],
+        );
+    }
     const lines = memories.map(
         (memory) => `- [${memory.category}] ${memory.content}`,
     );
