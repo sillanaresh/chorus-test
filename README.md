@@ -31,16 +31,9 @@ It is built for people who want one clean place to use the best models without j
 
 ## How it works
 
-```mermaid
-flowchart LR
-    You["You"] -->|type or speak| Composer["Composer"]
-    Composer --> Model{"Base or Strong model"}
-    Model --> OpenRouter["OpenRouter models"]
-    OpenRouter --> Answer["Answer"]
-    Memory[("Your private memories")] -. relevant context .-> Model
-    Answer -. learns durable facts .-> Memory
-    WebSearch["Web search"] -. optional .-> Model
-```
+<p align="center">
+  <img src="docs/architecture.svg" alt="How Chorus works: you talk to the Chorus app, which uses OpenRouter for models and OpenAI for voice and memory, with all your data stored on your iPhone" width="900" />
+</p>
 
 You write or speak a message. The app pulls in any memories that are relevant to what you asked, sends everything to your chosen model through OpenRouter, and streams the answer back. When a chat winds down, the app reviews it and saves anything worth remembering for next time.
 
@@ -67,34 +60,12 @@ Chorus for iPhone is built on the open-source [Chorus](https://github.com/meltyl
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    subgraph UI["React UI"]
-        Desktop["Desktop · MultiChat"]
-        Mobile["iPhone · MobileApp"]
-        Input["Shared ChatInput + voice"]
-    end
-    subgraph Core["Core logic (src/core/chorus)"]
-        ChatState["ChatState · message blocks"]
-        APIs["TanStack Query APIs"]
-        Providers["Provider layer"]
-        MemoryAPI["MemoryAPI"]
-    end
-    subgraph Native["Tauri / Rust"]
-        Migrations["SQLite migrations"]
-    end
-    DB[("chats.db")]
-    OpenAI["OpenAI"]
-    OpenRouter["OpenRouter"]
+The high-level system is shown in the [diagram above](#how-it-works). In code, it splits into four layers:
 
-    UI --> Core
-    Providers --> OpenRouter
-    Input -->|transcribe audio| OpenAI
-    MemoryAPI -->|extract + embed| OpenAI
-    APIs --> DB
-    MemoryAPI --> DB
-    Native --> DB
-```
+- **UI (`src/ui`)** — a React app shared by desktop (`MultiChat.tsx`) and iPhone (`MobileApp.tsx`), with one shared composer (`ChatInput.tsx`).
+- **Core (`src/core/chorus`)** — chat state and message blocks (`ChatState.ts`), data and product logic as TanStack Query APIs (`api/`), the model provider layer, and the memory layer (`api/MemoryAPI.ts`).
+- **Native (`src-tauri`)** — the Rust/Tauri shell and SQLite migrations.
+- **Storage** — a local SQLite database (`chats.db`) on the device.
 
 The same React codebase serves both desktop and iPhone. A small platform check (`src/ui/lib/platform.ts`) routes the iPhone into `MobileApp.tsx`, while both share one composer (`ChatInput.tsx`). Every model resolves through a thin provider interface (`IProvider.streamResponse`), so chat, memory, and voice all flow through clear, swappable seams.
 
@@ -102,20 +73,9 @@ The same React codebase serves both desktop and iPhone. A small platform check (
 
 This is the part that makes the app feel like it knows you. It is private: memories never leave your device except as the single OpenAI request needed to extract or find them.
 
-```mermaid
-flowchart LR
-    Idle["Chat goes idle"] --> Queue["Job queue, dedup by hash"]
-    Queue --> Extract["Extract durable facts, gpt-4o-mini"]
-    Extract --> Embed["Embed, text-embedding-3-small"]
-    Embed --> Similar{"Similar memory exists?"}
-    Similar -->|yes| Update["Update it in place"]
-    Similar -->|no| Insert["Insert new memory"]
-    Update --> Store[("memories table")]
-    Insert --> Store
-    NewMessage["New message"] --> Rank["Rank all memories, semantic + keyword"]
-    Store --> Rank
-    Rank --> Context["Top matches into system prompt"]
-```
+<p align="center">
+  <img src="docs/memory.svg" alt="How memory works: a conversation goes idle, the app learns durable facts and embeds them, stores them on device without duplicates, then ranks and recalls the relevant ones for the next chat" width="900" />
+</p>
 
 How each piece works:
 
