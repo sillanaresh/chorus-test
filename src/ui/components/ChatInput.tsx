@@ -38,8 +38,13 @@ import {
     ChevronDownIcon,
     FileTextIcon,
     ImageIcon,
+    Loader2Icon,
+    MicIcon,
     PaperclipIcon,
+    SquareIcon,
+    XIcon,
 } from "lucide-react";
+import { useVoiceRecorder } from "@ui/hooks/useVoiceRecorder";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { EmptyState } from "./EmptyState";
 import { handleInputPasteWithAttachments } from "@ui/lib/utils";
@@ -190,6 +195,18 @@ export function ChatInput({
     const placeholderText = isReply ? "Reply..." : "Ask me anything...";
 
     const settings = useSettings();
+
+    // Voice input (mobile composer only). Appends the transcript to the current
+    // draft so the user can dictate instead of typing.
+    const appendVoiceTranscript = useCallback(
+        (text: string) => {
+            const separator = draft && !/\s$/.test(draft) ? " " : "";
+            setDraft(`${draft}${separator}${text}`);
+            inputRef.current?.focus();
+        },
+        [draft, setDraft, inputRef],
+    );
+    const voice = useVoiceRecorder(appendVoiceTranscript);
 
     useEffect(() => {
         if (!isMobileApp || !mobileComposerRef.current) return;
@@ -900,11 +917,12 @@ export function ChatInput({
                     >
                         <button
                             type="button"
-                            className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted"
+                            className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted disabled:opacity-40"
                             onClick={(event) => {
                                 event.preventDefault();
                                 setIsMobileAttachmentMenuOpen(true);
                             }}
+                            disabled={voice.isRecording || voice.isTranscribing}
                             aria-label="Add attachment"
                         >
                             <PaperclipIcon
@@ -930,7 +948,13 @@ export function ChatInput({
                                     handleSubmit(e);
                                 }
                             }}
-                            placeholder={placeholderText}
+                            placeholder={
+                                voice.isRecording
+                                    ? "Recording… tap ■ to finish"
+                                    : voice.isTranscribing
+                                      ? "Transcribing…"
+                                      : placeholderText
+                            }
                             className="max-h-[32dvh] min-h-11 flex-1 rounded-2xl border bg-foreground/5 px-3.5 py-2.5 text-[17px] leading-[25px] placeholder:text-foreground/45 focus:outline-none focus:ring-0"
                             autoFocus={false}
                             autoComplete="off"
@@ -945,19 +969,63 @@ export function ChatInput({
                             }
                             onBlur={() => inputActions.setFocusedInputId(null)}
                         />
-                        <button
-                            className={`mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full transition-all ${
-                                canSubmit
-                                    ? "bg-primary text-background shadow-sm active:scale-95"
-                                    : "bg-muted text-muted-foreground opacity-70"
-                            }`}
-                            onClick={handleSubmit}
-                            type="button"
-                            disabled={!canSubmit}
-                            aria-label="Send message"
-                        >
-                            <ArrowUp className="size-5" strokeWidth={2.5} />
-                        </button>
+                        {voice.isTranscribing ? (
+                            <div
+                                className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground"
+                                aria-live="polite"
+                                aria-label="Transcribing voice message"
+                            >
+                                <Loader2Icon className="size-5 animate-spin" />
+                            </div>
+                        ) : voice.isRecording ? (
+                            <>
+                                <button
+                                    type="button"
+                                    className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted"
+                                    onClick={voice.cancel}
+                                    aria-label="Cancel recording"
+                                >
+                                    <XIcon
+                                        className="size-5"
+                                        strokeWidth={2}
+                                    />
+                                </button>
+                                <button
+                                    type="button"
+                                    className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-sm transition-transform animate-pulse active:scale-95"
+                                    onClick={voice.toggle}
+                                    aria-label="Stop recording and transcribe"
+                                >
+                                    <SquareIcon
+                                        className="size-4 fill-current"
+                                        strokeWidth={2}
+                                    />
+                                </button>
+                            </>
+                        ) : !hasSubmitContent && voice.isSupported ? (
+                            <button
+                                type="button"
+                                className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
+                                onClick={voice.toggle}
+                                aria-label="Record voice message"
+                            >
+                                <MicIcon className="size-5" strokeWidth={2} />
+                            </button>
+                        ) : (
+                            <button
+                                className={`mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full transition-all ${
+                                    canSubmit
+                                        ? "bg-primary text-background shadow-sm active:scale-95"
+                                        : "bg-muted text-muted-foreground opacity-70"
+                                }`}
+                                onClick={handleSubmit}
+                                type="button"
+                                disabled={!canSubmit}
+                                aria-label="Send message"
+                            >
+                                <ArrowUp className="size-5" strokeWidth={2.5} />
+                            </button>
+                        )}
                     </form>
                 </div>
                 {isMobileAttachmentMenuOpen &&
