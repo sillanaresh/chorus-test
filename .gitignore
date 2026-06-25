@@ -36,3 +36,5 @@ settings.local.json
 
 # husky
 !.husky/
+# Unsigned iOS build artifact
+Chorus-unsigned.ipa
