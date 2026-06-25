@@ -950,7 +950,7 @@ export function ChatInput({
                             }}
                             placeholder={
                                 voice.isRecording
-                                    ? "Recording… tap ■ to finish"
+                                    ? "Recording…"
                                     : voice.isTranscribing
                                       ? "Transcribing…"
                                       : placeholderText

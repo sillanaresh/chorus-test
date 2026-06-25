@@ -94,12 +94,39 @@ const mobileSettingsType = {
     supporting: "text-sm font-normal leading-5 text-muted-foreground",
 } as const;
 
-// iOS-style grouped settings category header.
-const mobileSettingsCategory =
-    "px-1 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground";
-
-// iOS-style inset grouped card that visually bundles a category's controls.
-const mobileSettingsCard = "rounded-xl border bg-foreground/[0.03] p-3";
+// Collapsible settings category. Collapsed by default so the panel reads as a
+// short list of categories instead of one long form; tap a row to expand it.
+function MobileSettingsGroup({
+    title,
+    defaultOpen = false,
+    children,
+}: {
+    title: string;
+    defaultOpen?: boolean;
+    children: React.ReactNode;
+}) {
+    const [open, setOpen] = useState(defaultOpen);
+    return (
+        <div className="overflow-hidden rounded-xl border">
+            <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left active:bg-muted"
+                onClick={() => setOpen((value) => !value)}
+                aria-expanded={open}
+            >
+                <span className="text-base font-semibold leading-6">
+                    {title}
+                </span>
+                <ChevronDownIcon
+                    className={`size-5 shrink-0 text-muted-foreground transition-transform ${
+                        open ? "rotate-180" : ""
+                    }`}
+                />
+            </button>
+            {open && <div className="border-t px-3 pb-4 pt-3">{children}</div>}
+        </div>
+    );
+}
 
 const mobileIconButton =
     "flex size-10 shrink-0 items-center justify-center rounded-full active:bg-muted";
@@ -1480,10 +1507,8 @@ function MobileSettingsPanel({
                 )}
             </div>
 
-            <div className="mobile-settings-scroll flex flex-col gap-8 overflow-y-auto px-4 py-5">
-                <div className="flex flex-col gap-2">
-                    <div className={mobileSettingsCategory}>Appearance</div>
-                    <div className={mobileSettingsCard}>
+            <div className="mobile-settings-scroll flex flex-col gap-3 overflow-y-auto px-4 py-5">
+                <MobileSettingsGroup title="Appearance">
                 <section className="flex flex-col gap-2">
                     <div className="grid grid-cols-3 gap-2">
                         {[
@@ -1522,12 +1547,9 @@ function MobileSettingsPanel({
                         })}
                     </div>
                 </section>
-                    </div>
-                </div>
+                </MobileSettingsGroup>
 
-                <div className="flex flex-col gap-2">
-                    <div className={mobileSettingsCategory}>Memory</div>
-                    <div className={mobileSettingsCard}>
+                <MobileSettingsGroup title="Memory">
                 <section className="flex flex-col gap-3">
                     <div>
                         <p className={mobileSettingsType.supporting}>
@@ -1649,12 +1671,12 @@ function MobileSettingsPanel({
                         Privacy and data
                     </button>
                 </section>
-                    </div>
-                </div>
+                </MobileSettingsGroup>
 
-                <div className="flex flex-col gap-2">
-                    <div className={mobileSettingsCategory}>Models &amp; Chat</div>
-                    <div className={mobileSettingsCard}>
+                <MobileSettingsGroup
+                    title="Models & Chat"
+                    defaultOpen={!hasOpenRouterKey}
+                >
                 <section className="flex flex-col gap-2">
                     <label
                         className={mobileSettingsType.section}
@@ -1799,8 +1821,7 @@ function MobileSettingsPanel({
                         />
                     </section>
                 )}
-                    </div>
-                </div>
+                </MobileSettingsGroup>
             </div>
 
             <div
