@@ -40,6 +40,8 @@ The iOS app keeps the main chat flow focused on small screens.
 -   Choose any available OpenRouter model for either slot without changing the global defaults.
 -   Turn web search on or off for each chat.
 -   Start chats and stream model responses.
+-   Dictate a message with the microphone button instead of typing it.
+-   Open the chat list with a swipe from the left edge of a chat.
 -   Search and manage local chat history.
 -   Rename, pin, and delete chats.
 -   Share a conversation as readable Markdown and structured JSON through the iOS share sheet.
@@ -68,6 +70,16 @@ For a new conversation, Chorus finds a small set of relevant memories and adds t
 The Memory screen lists everything Chorus has stored. The user can search the list and delete any item. The Settings screen can delete all memories.
 
 See [PRIVACY.md](PRIVACY.md) for the current data handling summary.
+
+### Voice input
+
+The mobile composer has a microphone button. When the message box is empty, the send button becomes a microphone. Tap it to record, then tap stop to finish. Chorus sends the audio to OpenAI for transcription and adds the text to the message box, where you can edit it before sending. You can also cancel a recording without transcribing it.
+
+Voice input uses the same OpenAI API key as Memory. The audio stays on the device except for the single transcription request. Chorus uses the `gpt-4o-transcribe` model with an English language hint, which handles accented English well. A short message costs a fraction of a cent.
+
+### Grouped settings
+
+The mobile Settings screen groups its options into categories: Appearance, Memory, and Models and Chat. The controls and their behavior are unchanged. The grouping makes a longer settings list easier to scan.
 
 ### Desktop experience
 
