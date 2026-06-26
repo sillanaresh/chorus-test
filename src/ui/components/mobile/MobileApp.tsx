@@ -2225,6 +2225,9 @@ function MobileAssistantMessage({
                 ) : message.state === "streaming" ? (
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <RetroSpinner />
+                        <span className="animate-pulse text-sm font-medium">
+                            Generating…
+                        </span>
                     </div>
                 ) : fullText ? (
                     <MessageMarkdown text={fullText} />
