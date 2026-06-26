@@ -1002,29 +1002,40 @@ export function ChatInput({
                                     />
                                 </button>
                             </>
-                        ) : !hasSubmitContent && voice.isSupported ? (
-                            <button
-                                type="button"
-                                className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
-                                onClick={voice.toggle}
-                                aria-label="Record voice message"
-                            >
-                                <MicIcon className="size-5" strokeWidth={2} />
-                            </button>
                         ) : (
-                            <button
-                                className={`mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full transition-all ${
-                                    canSubmit
-                                        ? "bg-primary text-background shadow-sm active:scale-95"
-                                        : "bg-muted text-muted-foreground opacity-70"
-                                }`}
-                                onClick={handleSubmit}
-                                type="button"
-                                disabled={!canSubmit}
-                                aria-label="Send message"
-                            >
-                                <ArrowUp className="size-5" strokeWidth={2.5} />
-                            </button>
+                            <>
+                                {voice.isSupported && (
+                                    <button
+                                        type="button"
+                                        className="mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
+                                        onClick={voice.toggle}
+                                        aria-label="Record voice message"
+                                    >
+                                        <MicIcon
+                                            className="size-5"
+                                            strokeWidth={2}
+                                        />
+                                    </button>
+                                )}
+                                {(hasSubmitContent || !voice.isSupported) && (
+                                    <button
+                                        className={`mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-full transition-all ${
+                                            canSubmit
+                                                ? "bg-primary text-background shadow-sm active:scale-95"
+                                                : "bg-muted text-muted-foreground opacity-70"
+                                        }`}
+                                        onClick={handleSubmit}
+                                        type="button"
+                                        disabled={!canSubmit}
+                                        aria-label="Send message"
+                                    >
+                                        <ArrowUp
+                                            className="size-5"
+                                            strokeWidth={2.5}
+                                        />
+                                    </button>
+                                )}
+                            </>
                         )}
                     </form>
                 </div>
