@@ -456,7 +456,16 @@ export function ChatInput({
         !isQuickChatWindow ||
         !isMobileApp ||
         isMobileOpenRouterModelUsable(selectedQuickChatModelForChat);
-    const canSubmit = hasSubmitContent && canSubmitMobileQuickChat;
+    // On mobile, block sending while the current answer is still generating.
+    const isGenerating =
+        isMobileApp &&
+        Boolean(
+            currentMessageSet?.toolsBlock.chatMessages.some(
+                (message) => message.state === "streaming",
+            ),
+        );
+    const canSubmit =
+        hasSubmitContent && canSubmitMobileQuickChat && !isGenerating;
 
     const handlePaste = async (
         e: React.ClipboardEvent<HTMLTextAreaElement>,
