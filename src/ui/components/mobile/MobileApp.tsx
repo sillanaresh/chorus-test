@@ -3188,11 +3188,7 @@ export default function MobileApp() {
             {showColdStartBoot ? (
                 <div className="mobile-boot-screen">
                     <RetroSpinner />
-                    {/* TEMPORARY marker to confirm the simulator is running
-                        this build. Remove once verified. */}
-                    <div className="mobile-boot-copy">
-                        Loading Chorus… (cold-start v1)
-                    </div>
+                    <div className="mobile-boot-copy">Loading Chorus…</div>
                 </div>
             ) : (
                 <Routes>
