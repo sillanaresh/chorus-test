@@ -63,6 +63,11 @@ import {
     isMobileOpenRouterModelUsable,
     sortMobileOpenRouterModels,
 } from "@ui/lib/mobileModels";
+import {
+    MOBILE_COLOR_VAR_KEYS,
+    mobileColorPresets,
+    mobileColorPresetVars,
+} from "@ui/lib/mobileColorPresets";
 import type { Chat } from "@core/chorus/api/ChatAPI";
 import type { Message, MessageSetDetail } from "@core/chorus/ChatState";
 import * as AppMetadataAPI from "@core/chorus/api/AppMetadataAPI";
@@ -1206,6 +1211,8 @@ function MobileSettingsPanel({
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { mode, setMode } = useTheme();
+    const colorPreset = AppMetadataAPI.useMobileColorPreset();
+    const setColorPreset = AppMetadataAPI.useSetMobileColorPreset();
     const { data: apiKeys } = AppMetadataAPI.useApiKeys();
     const skipOnboarding = AppMetadataAPI.useSkipOnboarding();
     const mobileWebSearch = useMobileWebSearchToggle();
@@ -1542,6 +1549,46 @@ function MobileSettingsPanel({
                                 >
                                     <Icon className="size-4" />
                                     {option.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <p className={mobileSettingsType.supporting}>
+                        Color theme
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                        {mobileColorPresets.map((preset) => {
+                            const active = colorPreset === preset.id;
+                            return (
+                                <button
+                                    key={preset.id}
+                                    type="button"
+                                    className={`flex h-11 items-center gap-2.5 rounded-md border px-3 ${mobileSettingsType.control} ${
+                                        active
+                                            ? "border-primary bg-primary text-background"
+                                            : "bg-background active:bg-muted"
+                                    }`}
+                                    onClick={() =>
+                                        setColorPreset.mutate(preset.id)
+                                    }
+                                >
+                                    <span
+                                        className="flex size-5 shrink-0 items-center justify-center rounded-full border"
+                                        style={{
+                                            backgroundColor:
+                                                preset.swatch.background,
+                                            borderColor: preset.swatch.box,
+                                        }}
+                                    >
+                                        <span
+                                            className="size-2 rounded-full"
+                                            style={{
+                                                backgroundColor:
+                                                    preset.swatch.text,
+                                            }}
+                                        />
+                                    </span>
+                                    {preset.label}
                                 </button>
                             );
                         })}
@@ -3175,6 +3222,24 @@ export default function MobileApp() {
     const showColdStartBoot =
         coldStartPhase === "deciding" || coldStartPhase === "redirecting";
 
+    // Optional color preset, applied as theme-variable overrides scoped to the
+    // mobile app root so the stock look (and the brown answer box) is the
+    // default and nothing else in the app is affected.
+    const colorPreset = AppMetadataAPI.useMobileColorPreset();
+    const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+    useEffect(() => {
+        if (!rootEl) return;
+        const vars = mobileColorPresetVars(colorPreset);
+        for (const key of MOBILE_COLOR_VAR_KEYS) {
+            const value = vars?.[key];
+            if (value !== undefined) {
+                rootEl.style.setProperty(`--${key}`, value);
+            } else {
+                rootEl.style.removeProperty(`--${key}`);
+            }
+        }
+    }, [rootEl, colorPreset]);
+
     const toasterTheme =
         mode === "system"
             ? window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -3183,7 +3248,10 @@ export default function MobileApp() {
             : mode;
 
     return (
-        <div className="mobile-app overflow-hidden bg-background text-foreground">
+        <div
+            ref={setRootEl}
+            className="mobile-app overflow-hidden bg-background text-foreground"
+        >
             <MobileModelBootstrap />
             {showColdStartBoot ? (
                 <div className="mobile-boot-screen">

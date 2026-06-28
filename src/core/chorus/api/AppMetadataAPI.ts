@@ -457,6 +457,35 @@ export function useSetMobileUserSystemPrompt() {
     });
 }
 
+export function useMobileColorPreset() {
+    const { data: appMetadata } = useAppMetadata();
+    return appMetadata?.["mobile_color_preset"] ?? "default";
+}
+
+export function useSetMobileColorPreset() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationKey: ["setMobileColorPreset"] as const,
+        mutationFn: async (presetId: string) => {
+            if (presetId && presetId !== "default") {
+                await db.execute(
+                    "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)",
+                    ["mobile_color_preset", presetId],
+                );
+            } else {
+                await db.execute(
+                    "DELETE FROM app_metadata WHERE key = 'mobile_color_preset'",
+                );
+            }
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: appMetadataKeys.appMetadata(),
+            });
+        },
+    });
+}
+
 export async function getApiKeys() {
     const settingsManager = SettingsManager.getInstance();
     const settings = await settingsManager.get();
