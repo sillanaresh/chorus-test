@@ -65,8 +65,8 @@ import {
 } from "@ui/lib/mobileModels";
 import {
     MOBILE_COLOR_VAR_KEYS,
-    mobileColorPresets,
-    mobileColorPresetVars,
+    mobileColorVars,
+    hslTripletToHex,
 } from "@ui/lib/mobileColorPresets";
 import type { Chat } from "@core/chorus/api/ChatAPI";
 import type { Message, MessageSetDetail } from "@core/chorus/ChatState";
@@ -176,6 +176,16 @@ function wordCount(value: string) {
 function limitWords(value: string, limit: number) {
     const words = value.trim().split(/\s+/);
     return words.length > limit ? words.slice(0, limit).join(" ") : value;
+}
+
+/** Read a live theme variable (an "H S% L%" triplet) as hex, for seeding the
+ * color inputs with the current effective color. */
+function readMobileThemeHex(varName: string, fallback: string): string {
+    if (typeof window === "undefined") return fallback;
+    const triplet = getComputedStyle(document.documentElement)
+        .getPropertyValue(varName)
+        .trim();
+    return (triplet && hslTripletToHex(triplet)) || fallback;
 }
 
 function isOpenRouterModel(modelConfig: ModelConfig | undefined | null) {
@@ -1211,8 +1221,9 @@ function MobileSettingsPanel({
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { mode, setMode } = useTheme();
-    const colorPreset = AppMetadataAPI.useMobileColorPreset();
-    const setColorPreset = AppMetadataAPI.useSetMobileColorPreset();
+    const customColors = AppMetadataAPI.useMobileColors();
+    const setMobileColor = AppMetadataAPI.useSetMobileColor();
+    const resetMobileColors = AppMetadataAPI.useResetMobileColors();
     const { data: apiKeys } = AppMetadataAPI.useApiKeys();
     const skipOnboarding = AppMetadataAPI.useSkipOnboarding();
     const mobileWebSearch = useMobileWebSearchToggle();
@@ -1553,43 +1564,73 @@ function MobileSettingsPanel({
                             );
                         })}
                     </div>
-                    <p className={mobileSettingsType.supporting}>
-                        Color theme
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                        {mobileColorPresets.map((preset) => {
-                            const active = colorPreset === preset.id;
+                    <div className="flex items-center justify-between">
+                        <p className={mobileSettingsType.supporting}>Colors</p>
+                        {(customColors.background ||
+                            customColors.foreground ||
+                            customColors.box) && (
+                            <button
+                                type="button"
+                                className="text-sm font-medium text-accent-800 active:opacity-60 dark:text-accent-25"
+                                onClick={() => resetMobileColors.mutate()}
+                            >
+                                Reset
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        {[
+                            {
+                                slot: "background" as const,
+                                label: "Background",
+                                varName: "--background",
+                                fallback: "#ffffff",
+                            },
+                            {
+                                slot: "foreground" as const,
+                                label: "Text",
+                                varName: "--foreground",
+                                fallback: "#1f1b18",
+                            },
+                            {
+                                slot: "box" as const,
+                                label: "Answer box",
+                                varName: "--special",
+                                fallback: "#c08a5e",
+                            },
+                        ].map((row) => {
+                            const saved = customColors[row.slot];
+                            const current =
+                                saved ??
+                                readMobileThemeHex(row.varName, row.fallback);
                             return (
-                                <button
-                                    key={preset.id}
-                                    type="button"
-                                    className={`flex h-11 items-center gap-2.5 rounded-md border px-3 ${mobileSettingsType.control} ${
-                                        active
-                                            ? "border-primary bg-primary text-background"
-                                            : "bg-background active:bg-muted"
-                                    }`}
-                                    onClick={() =>
-                                        setColorPreset.mutate(preset.id)
-                                    }
+                                <label
+                                    key={row.slot}
+                                    className={`flex h-11 items-center justify-between gap-3 rounded-md border bg-background px-3 ${mobileSettingsType.control}`}
                                 >
-                                    <span
-                                        className="flex size-5 shrink-0 items-center justify-center rounded-full border"
-                                        style={{
-                                            backgroundColor:
-                                                preset.swatch.background,
-                                            borderColor: preset.swatch.box,
-                                        }}
-                                    >
+                                    <span>{row.label}</span>
+                                    <span className="flex items-center gap-2">
                                         <span
-                                            className="size-2 rounded-full"
-                                            style={{
-                                                backgroundColor:
-                                                    preset.swatch.text,
-                                            }}
+                                            className={
+                                                mobileSettingsType.supporting
+                                            }
+                                        >
+                                            {current.toUpperCase()}
+                                        </span>
+                                        <input
+                                            type="color"
+                                            value={current}
+                                            onChange={(event) =>
+                                                setMobileColor.mutate({
+                                                    slot: row.slot,
+                                                    value: event.target.value,
+                                                })
+                                            }
+                                            className="size-7 cursor-pointer rounded-md border bg-transparent p-0.5"
+                                            aria-label={`${row.label} color`}
                                         />
                                     </span>
-                                    {preset.label}
-                                </button>
+                                </label>
                             );
                         })}
                     </div>
@@ -3222,14 +3263,18 @@ export default function MobileApp() {
     const showColdStartBoot =
         coldStartPhase === "deciding" || coldStartPhase === "redirecting";
 
-    // Optional color preset, applied as theme-variable overrides scoped to the
+    // Optional custom colors, applied as theme-variable overrides scoped to the
     // mobile app root so the stock look (and the brown answer box) is the
     // default and nothing else in the app is affected.
-    const colorPreset = AppMetadataAPI.useMobileColorPreset();
+    const customColors = AppMetadataAPI.useMobileColors();
     const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
     useEffect(() => {
         if (!rootEl) return;
-        const vars = mobileColorPresetVars(colorPreset);
+        const vars = mobileColorVars({
+            background: customColors.background,
+            foreground: customColors.foreground,
+            box: customColors.box,
+        });
         for (const key of MOBILE_COLOR_VAR_KEYS) {
             const value = vars?.[key];
             if (value !== undefined) {
@@ -3238,7 +3283,12 @@ export default function MobileApp() {
                 rootEl.style.removeProperty(`--${key}`);
             }
         }
-    }, [rootEl, colorPreset]);
+    }, [
+        rootEl,
+        customColors.background,
+        customColors.foreground,
+        customColors.box,
+    ]);
 
     const toasterTheme =
         mode === "system"

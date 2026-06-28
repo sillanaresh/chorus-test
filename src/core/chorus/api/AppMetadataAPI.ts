@@ -457,26 +457,67 @@ export function useSetMobileUserSystemPrompt() {
     });
 }
 
-export function useMobileColorPreset() {
+export type MobileColorSlot = "background" | "foreground" | "box";
+
+const MOBILE_COLOR_KEYS: Record<MobileColorSlot, string> = {
+    background: "mobile_color_background",
+    foreground: "mobile_color_foreground",
+    box: "mobile_color_box",
+};
+
+export function useMobileColors() {
     const { data: appMetadata } = useAppMetadata();
-    return appMetadata?.["mobile_color_preset"] ?? "default";
+    return {
+        background: appMetadata?.[MOBILE_COLOR_KEYS.background],
+        foreground: appMetadata?.[MOBILE_COLOR_KEYS.foreground],
+        box: appMetadata?.[MOBILE_COLOR_KEYS.box],
+    };
 }
 
-export function useSetMobileColorPreset() {
+export function useSetMobileColor() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationKey: ["setMobileColorPreset"] as const,
-        mutationFn: async (presetId: string) => {
-            if (presetId && presetId !== "default") {
+        mutationKey: ["setMobileColor"] as const,
+        mutationFn: async ({
+            slot,
+            value,
+        }: {
+            slot: MobileColorSlot;
+            value: string | undefined;
+        }) => {
+            const key = MOBILE_COLOR_KEYS[slot];
+            if (value) {
                 await db.execute(
                     "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)",
-                    ["mobile_color_preset", presetId],
+                    [key, value],
                 );
             } else {
-                await db.execute(
-                    "DELETE FROM app_metadata WHERE key = 'mobile_color_preset'",
-                );
+                await db.execute("DELETE FROM app_metadata WHERE key = ?", [
+                    key,
+                ]);
             }
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: appMetadataKeys.appMetadata(),
+            });
+        },
+    });
+}
+
+export function useResetMobileColors() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationKey: ["resetMobileColors"] as const,
+        mutationFn: async () => {
+            await db.execute(
+                "DELETE FROM app_metadata WHERE key IN (?, ?, ?)",
+                [
+                    MOBILE_COLOR_KEYS.background,
+                    MOBILE_COLOR_KEYS.foreground,
+                    MOBILE_COLOR_KEYS.box,
+                ],
+            );
         },
         onSuccess: async () => {
             await queryClient.invalidateQueries({
