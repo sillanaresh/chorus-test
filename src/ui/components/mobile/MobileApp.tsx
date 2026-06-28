@@ -3132,6 +3132,49 @@ export default function MobileApp() {
     const navigate = useNavigate();
     const currentChatId = location.pathname.match(/^\/chat\/([^/]+)$/)?.[1];
 
+    // On a cold open we want to land directly in a new chat instead of the
+    // chat list. We gate the whole router on a boot screen until that new chat
+    // exists and we've navigated to it, so the chat list never paints first
+    // (no flash). This only runs for the very first mount at the root path;
+    // navigating back to the home list later behaves normally.
+    const { data: apiKeys, isPending: apiKeysPending } =
+        AppMetadataAPI.useApiKeys();
+    const getOrCreateNewQuickChat = ChatAPI.useGetOrCreateNewQuickChat();
+    const [coldStartPhase, setColdStartPhase] = useState<
+        "deciding" | "redirecting" | "done"
+    >(location.pathname === "/" ? "deciding" : "done");
+
+    useEffect(() => {
+        if (coldStartPhase !== "deciding") return;
+        // Wait until we know whether the user has a key before deciding.
+        if (apiKeysPending) return;
+
+        if (apiKeys?.openrouter) {
+            // Has a key: open straight into a new chat.
+            setColdStartPhase("redirecting");
+            getOrCreateNewQuickChat.mutate(undefined, {
+                // If creating the chat fails, fall back to the home list
+                // rather than getting stuck on the boot screen.
+                onError: () => setColdStartPhase("done"),
+            });
+        } else {
+            // No key yet: let the home route render (it shows the settings
+            // panel for first-time setup).
+            setColdStartPhase("done");
+        }
+    }, [coldStartPhase, apiKeysPending, apiKeys?.openrouter, getOrCreateNewQuickChat]);
+
+    useEffect(() => {
+        // Lift the boot gate only once navigation has actually left the root,
+        // so the chat list never renders in between.
+        if (coldStartPhase === "redirecting" && location.pathname !== "/") {
+            setColdStartPhase("done");
+        }
+    }, [coldStartPhase, location.pathname]);
+
+    const showColdStartBoot =
+        coldStartPhase === "deciding" || coldStartPhase === "redirecting";
+
     const toasterTheme =
         mode === "system"
             ? window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -3142,20 +3185,31 @@ export default function MobileApp() {
     return (
         <div className="mobile-app overflow-hidden bg-background text-foreground">
             <MobileModelBootstrap />
-            <Routes>
-                <Route
-                    path="/chat/:chatId"
-                    element={
-                        <MobileChatRoute
-                            onOpenChats={() => setIsChatListOpen(true)}
-                        />
-                    }
-                />
-                <Route path="/settings" element={<MobileSettingsRoute />} />
-                <Route path="/memories" element={<MobileMemoriesRoute />} />
-                <Route path="/privacy" element={<MobilePrivacyRoute />} />
-                <Route path="*" element={<MobileHome />} />
-            </Routes>
+            {showColdStartBoot ? (
+                <div className="mobile-boot-screen">
+                    <RetroSpinner />
+                    {/* TEMPORARY marker to confirm the simulator is running
+                        this build. Remove once verified. */}
+                    <div className="mobile-boot-copy">
+                        Loading Chorus… (cold-start v1)
+                    </div>
+                </div>
+            ) : (
+                <Routes>
+                    <Route
+                        path="/chat/:chatId"
+                        element={
+                            <MobileChatRoute
+                                onOpenChats={() => setIsChatListOpen(true)}
+                            />
+                        }
+                    />
+                    <Route path="/settings" element={<MobileSettingsRoute />} />
+                    <Route path="/memories" element={<MobileMemoriesRoute />} />
+                    <Route path="/privacy" element={<MobilePrivacyRoute />} />
+                    <Route path="*" element={<MobileHome />} />
+                </Routes>
+            )}
 
             <MobileChatListSheet
                 open={isChatListOpen}
