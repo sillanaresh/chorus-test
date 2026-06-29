@@ -1,0 +1,3 @@
+[default]
+description = "Allows beginning and ending an iOS background task"
+permissions = ["allow-begin-task", "allow-end-task"]

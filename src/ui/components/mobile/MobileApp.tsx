@@ -73,6 +73,7 @@ import type { Message, MessageSetDetail } from "@core/chorus/ChatState";
 import * as AppMetadataAPI from "@core/chorus/api/AppMetadataAPI";
 import * as ChatAPI from "@core/chorus/api/ChatAPI";
 import { setMessageDraft, draftKeys } from "@core/chorus/api/DraftAPI";
+import { invoke } from "@tauri-apps/api/core";
 import * as MessageAPI from "@core/chorus/api/MessageAPI";
 import * as ModelConfigChatAPI from "@core/chorus/api/ModelConfigChatAPI";
 import * as ModelsAPI from "@core/chorus/api/ModelsAPI";
@@ -226,54 +227,22 @@ const BACKGROUND_INTERRUPT_MARKER =
     "The response was interrupted while Chorus was in the background.";
 
 // Keeps the app (and the in-flight streaming fetch) alive while an answer is
-// generating, even if the user backgrounds the app, by holding a silent audio
-// session. Paired with UIBackgroundModes "audio" in the iOS Info.plist. Best
-// effort: if the OS suspends anyway, the existing interrupt handling applies.
-const streamKeepAlive = (() => {
-    let ctx: AudioContext | undefined;
-    let osc: OscillatorNode | undefined;
-    let running = false;
-
-    const ensureCtx = (): AudioContext | undefined => {
-        if (typeof AudioContext === "undefined") return undefined;
-        if (!ctx) ctx = new AudioContext();
-        return ctx;
-    };
-
-    return {
-        // Call from a user gesture so the audio session may start.
-        prime() {
-            const c = ensureCtx();
-            if (c && c.state === "suspended") void c.resume();
-        },
-        start() {
-            if (running) return;
-            const c = ensureCtx();
-            if (!c) return;
-            void c.resume();
-            const oscillator = c.createOscillator();
-            const gain = c.createGain();
-            gain.gain.value = 0.0001; // inaudible but non-zero
-            oscillator.connect(gain).connect(c.destination);
-            oscillator.start();
-            osc = oscillator;
-            running = true;
-        },
-        stop() {
-            if (!running) return;
-            running = false;
-            if (osc) {
-                try {
-                    osc.stop();
-                    osc.disconnect();
-                } catch {
-                    // oscillator already stopped
-                }
-                osc = undefined;
-            }
-        },
-    };
-})();
+// generating, even if the user backgrounds the app, by asking iOS for a
+// background-task execution window via the native background-task plugin
+// (UIApplication.beginBackgroundTask). Best effort: if the OS reclaims the
+// time anyway, the existing interrupt handling applies.
+const streamKeepAlive = {
+    start() {
+        void invoke("plugin:background-task|begin_task").catch(() => {
+            // plugin unavailable (e.g. non-iOS) — ignore
+        });
+    },
+    stop() {
+        void invoke("plugin:background-task|end_task").catch(() => {
+            // plugin unavailable (e.g. non-iOS) — ignore
+        });
+    },
+};
 
 function isOpenRouterModel(modelConfig: ModelConfig | undefined | null) {
     if (!modelConfig) return false;
@@ -3029,10 +2998,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     return (
         <div
             className="mobile-app-shell flex h-full flex-col bg-background"
-            onTouchStart={(event) => {
-                streamKeepAlive.prime();
-                chatListSwipe.onTouchStart(event);
-            }}
+            onTouchStart={chatListSwipe.onTouchStart}
             onTouchMove={chatListSwipe.onTouchMove}
             onTouchEnd={chatListSwipe.onTouchEnd}
         >
