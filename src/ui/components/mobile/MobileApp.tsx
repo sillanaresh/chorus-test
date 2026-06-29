@@ -112,10 +112,10 @@ function MobileSettingsGroup({
 }) {
     const [open, setOpen] = useState(defaultOpen);
     return (
-        <div className="overflow-hidden rounded-xl border">
+        <div className="overflow-hidden rounded-xl bg-muted/50">
             <button
                 type="button"
-                className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left active:bg-muted"
+                className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left active:bg-foreground/5"
                 onClick={() => setOpen((value) => !value)}
                 aria-expanded={open}
             >
@@ -128,7 +128,7 @@ function MobileSettingsGroup({
                     }`}
                 />
             </button>
-            {open && <div className="border-t px-3 pb-4 pt-3">{children}</div>}
+            {open && <div className="px-3 pb-4 pt-1">{children}</div>}
         </div>
     );
 }
