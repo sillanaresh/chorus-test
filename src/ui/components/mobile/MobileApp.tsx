@@ -72,6 +72,7 @@ import type { Chat } from "@core/chorus/api/ChatAPI";
 import type { Message, MessageSetDetail } from "@core/chorus/ChatState";
 import * as AppMetadataAPI from "@core/chorus/api/AppMetadataAPI";
 import * as ChatAPI from "@core/chorus/api/ChatAPI";
+import { setMessageDraft, draftKeys } from "@core/chorus/api/DraftAPI";
 import * as MessageAPI from "@core/chorus/api/MessageAPI";
 import * as ModelConfigChatAPI from "@core/chorus/api/ModelConfigChatAPI";
 import * as ModelsAPI from "@core/chorus/api/ModelsAPI";
@@ -187,6 +188,15 @@ function readMobileThemeHex(varName: string, fallback: string): string {
         .trim();
     return (triplet && hslTripletToHex(triplet)) || fallback;
 }
+
+// Tappable starter prompts shown on an empty new chat. They prefill the
+// composer (editable) rather than sending immediately.
+const MOBILE_SUGGESTED_PROMPTS = [
+    "Explain a tricky concept in simple terms",
+    "Draft a quick email for me",
+    "Brainstorm ideas for a project",
+    "Summarize a long piece of text",
+] as const;
 
 function isOpenRouterModel(modelConfig: ModelConfig | undefined | null) {
     if (!modelConfig) return false;
@@ -1224,6 +1234,10 @@ function MobileSettingsPanel({
     const customColors = AppMetadataAPI.useMobileColors();
     const setMobileColor = AppMetadataAPI.useSetMobileColor();
     const resetMobileColors = AppMetadataAPI.useResetMobileColors();
+    const suggestedPromptsEnabled =
+        AppMetadataAPI.useMobileSuggestedPromptsEnabled();
+    const setSuggestedPromptsEnabled =
+        AppMetadataAPI.useSetMobileSuggestedPromptsEnabled();
     const { data: apiKeys } = AppMetadataAPI.useApiKeys();
     const skipOnboarding = AppMetadataAPI.useSkipOnboarding();
     const mobileWebSearch = useMobileWebSearchToggle();
@@ -1633,6 +1647,23 @@ function MobileSettingsPanel({
                                 </label>
                             );
                         })}
+                    </div>
+                    <div className="flex items-center justify-between gap-4 rounded-md border bg-background px-3 py-3">
+                        <div className="min-w-0">
+                            <div className={mobileSettingsType.control}>
+                                Suggested prompts
+                            </div>
+                            <p className={mobileSettingsType.supporting}>
+                                Show example prompts on a new chat.
+                            </p>
+                        </div>
+                        <Switch
+                            checked={suggestedPromptsEnabled}
+                            onCheckedChange={(checked) =>
+                                setSuggestedPromptsEnabled.mutate(checked)
+                            }
+                            className="data-[state=checked]:bg-accent-800 data-[state=unchecked]:bg-muted-foreground/35"
+                        />
                     </div>
                 </section>
                 </MobileSettingsGroup>
@@ -2524,6 +2555,10 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     const messageSetsQuery = MessageAPI.useMessageSets(chatId ?? "");
     const modelConfigsQuery = ModelsAPI.useModelConfigs();
     const stopMessage = MessageAPI.useStopMessage();
+    const queryClient = useQueryClient();
+    const suggestedPromptsEnabled =
+        AppMetadataAPI.useMobileSuggestedPromptsEnabled();
+    const [showScrollToBottom, setShowScrollToBottom] = useState(false);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const eyeRef = useRef<MouseTrackingEyeRef>(null);
     const scrollContainerRef = useRef<HTMLElement>(null);
@@ -2574,6 +2609,30 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
             });
         });
     }, []);
+
+    // Show a "jump to latest" affordance when scrolled up away from the bottom.
+    const handleChatScroll = useCallback(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const distanceFromBottom =
+            container.scrollHeight - container.scrollTop - container.clientHeight;
+        setShowScrollToBottom(distanceFromBottom > 280);
+    }, []);
+
+    // Prefill the composer with a starter prompt (editable, not auto-sent).
+    const applySuggestedPrompt = useCallback(
+        (text: string) => {
+            if (!chatId) return;
+            void (async () => {
+                await setMessageDraft(chatId, text);
+                await queryClient.invalidateQueries({
+                    queryKey: draftKeys.messageDraft(chatId),
+                });
+                inputRef.current?.focus();
+            })();
+        },
+        [chatId, queryClient],
+    );
 
     useEffect(() => {
         requestAnimationFrame(() => {
@@ -2846,6 +2905,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
 
             <main
                 ref={scrollContainerRef}
+                onScroll={handleChatScroll}
                 className="mobile-chat-scroll flex-1 overflow-y-auto overscroll-contain px-4 pt-4"
             >
                 {messageSets.length === 0 ? (
@@ -2853,6 +2913,22 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
                         <p className="text-base leading-6 text-muted-foreground">
                             Send a message to get started.
                         </p>
+                        {suggestedPromptsEnabled && (
+                            <div className="mt-5 flex w-full max-w-sm flex-col gap-2">
+                                {MOBILE_SUGGESTED_PROMPTS.map((prompt) => (
+                                    <button
+                                        key={prompt}
+                                        type="button"
+                                        className="rounded-xl border bg-muted/40 px-4 py-3 text-left text-sm leading-5 text-foreground active:bg-muted"
+                                        onClick={() =>
+                                            applySuggestedPrompt(prompt)
+                                        }
+                                    >
+                                        {prompt}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 pb-4">
@@ -2872,6 +2948,19 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
             </main>
 
             <div className="relative shrink-0">
+                {showScrollToBottom && messageSets.length > 0 && (
+                    <button
+                        type="button"
+                        aria-label="Scroll to latest"
+                        className="absolute -top-12 right-4 z-10 flex size-10 items-center justify-center rounded-full border bg-background text-foreground shadow-md active:bg-muted"
+                        onClick={() => {
+                            scrollToLatestMessageSet();
+                            setShowScrollToBottom(false);
+                        }}
+                    >
+                        <ChevronDownIcon className="size-5" />
+                    </button>
+                )}
                 <ChatInput
                     chatId={chatId}
                     isNewChat={isNewChat}

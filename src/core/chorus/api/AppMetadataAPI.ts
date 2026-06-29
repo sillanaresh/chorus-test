@@ -527,6 +527,37 @@ export function useResetMobileColors() {
     });
 }
 
+export function useMobileSuggestedPromptsEnabled() {
+    const { data: appMetadata } = useAppMetadata();
+    // Enabled by default; only off when explicitly set to "false".
+    return appMetadata?.["mobile_suggested_prompts_enabled"] !== "false";
+}
+
+export function useSetMobileSuggestedPromptsEnabled() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationKey: ["setMobileSuggestedPromptsEnabled"] as const,
+        mutationFn: async (enabled: boolean) => {
+            if (enabled) {
+                // Default state: remove the override.
+                await db.execute(
+                    "DELETE FROM app_metadata WHERE key = 'mobile_suggested_prompts_enabled'",
+                );
+            } else {
+                await db.execute(
+                    "INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)",
+                    ["mobile_suggested_prompts_enabled", "false"],
+                );
+            }
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: appMetadataKeys.appMetadata(),
+            });
+        },
+    });
+}
+
 export async function getApiKeys() {
     const settingsManager = SettingsManager.getInstance();
     const settings = await settingsManager.get();
