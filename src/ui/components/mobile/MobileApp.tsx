@@ -2136,6 +2136,7 @@ function MobileChatListSheet({
 }
 
 function MobileHeader({
+    chat,
     onBack,
     onOpenChats,
     onNewChat,
@@ -2147,6 +2148,32 @@ function MobileHeader({
 }) {
     const { chatId } = useParams();
     const mobileWebSearch = useMobileWebSearchToggle(chatId);
+    const [isSharing, setIsSharing] = useState(false);
+
+    // Only offer share once the conversation actually has content.
+    const canShare = Boolean(chatId && chat && !chat.isNewChat);
+
+    const handleShare = () => {
+        if (!chatId) return;
+        setIsSharing(true);
+        void ExportAPI.shareChat(chatId)
+            .then((result) => {
+                if (result === "saved") {
+                    toast.success("Conversation exported");
+                }
+            })
+            .catch((error) => {
+                if (
+                    error instanceof DOMException &&
+                    error.name === "AbortError"
+                ) {
+                    return;
+                }
+                console.error(error);
+                toast.error("Could not share conversation");
+            })
+            .finally(() => setIsSharing(false));
+    };
 
     return (
         <header className="mobile-header mobile-safe-top border-b bg-background/95 backdrop-blur-xl">
@@ -2165,6 +2192,17 @@ function MobileHeader({
                 </button>
                 <MobileChatModelControl chatId={chatId} />
                 <div className="flex shrink-0 items-center gap-2">
+                    {canShare && (
+                        <button
+                            type="button"
+                            className={mobileHeaderAction}
+                            onClick={handleShare}
+                            disabled={isSharing}
+                            aria-label="Share conversation"
+                        >
+                            <Share2Icon className="size-5" />
+                        </button>
+                    )}
                     <button
                         type="button"
                         role="switch"
