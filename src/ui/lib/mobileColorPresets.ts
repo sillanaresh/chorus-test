@@ -22,10 +22,21 @@ export const MOBILE_COLOR_VAR_KEYS = [
     "card",
     "popover",
     "muted",
+    "highlight",
+    "accent",
+    "secondary",
     "foreground",
     "card-foreground",
+    "popover-foreground",
+    "highlight-foreground",
+    "accent-foreground",
+    "secondary-foreground",
     "muted-foreground",
+    "primary",
+    "primary-foreground",
     "border",
+    "input",
+    "ring",
     "special",
 ] as const;
 
@@ -132,32 +143,41 @@ export function mobileColorVars(
     const bgRgb = colors.background ? hexToRgb(colors.background) : undefined;
     const fgRgb = colors.foreground ? hexToRgb(colors.foreground) : undefined;
 
-    if (colors.background) {
-        const bg = hexToHslTriplet(colors.background);
-        if (bg) {
-            vars.background = bg;
-            vars.card = bg;
-            vars.popover = bg;
-        }
-    }
-    if (colors.foreground) {
-        const fg = hexToHslTriplet(colors.foreground);
-        if (fg) {
-            vars.foreground = fg;
-            vars["card-foreground"] = fg;
-        }
-    }
     if (colors.box) {
         const box = hexToHslTriplet(colors.box);
         if (box) vars.special = box;
     }
 
-    // Derive supporting tones from the chosen background + text so secondary
-    // text, muted surfaces and borders stay readable on the new colors.
+    // Background and text together drive every surface and on-surface token so
+    // the whole app stays coherent (no leftover default grays or white bubbles).
     if (bgRgb && fgRgb) {
-        vars.muted = hslTripletFromRgb(mix(bgRgb, fgRgb, 0.08));
+        const bg = hslTripletFromRgb(bgRgb);
+        const fg = hslTripletFromRgb(fgRgb);
+        // Surfaces resting directly on the background.
+        vars.background = bg;
+        vars.card = bg;
+        vars.popover = bg;
+        // Slightly raised surfaces: muted rows, selected bubbles, accents.
+        const raised = hslTripletFromRgb(mix(bgRgb, fgRgb, 0.1));
+        vars.muted = hslTripletFromRgb(mix(bgRgb, fgRgb, 0.07));
+        vars.highlight = raised;
+        vars.accent = raised;
+        vars.secondary = raised;
+        // Text on those surfaces.
+        vars.foreground = fg;
+        vars["card-foreground"] = fg;
+        vars["popover-foreground"] = fg;
+        vars["highlight-foreground"] = fg;
+        vars["accent-foreground"] = fg;
+        vars["secondary-foreground"] = fg;
         vars["muted-foreground"] = hslTripletFromRgb(mix(fgRgb, bgRgb, 0.4));
+        // Solid accent (primary buttons): text color filled, background text.
+        vars.primary = fg;
+        vars["primary-foreground"] = bg;
+        // Lines and focus rings.
         vars.border = hslTripletFromRgb(mix(bgRgb, fgRgb, 0.18));
+        vars.input = hslTripletFromRgb(mix(bgRgb, fgRgb, 0.18));
+        vars.ring = hslTripletFromRgb(mix(fgRgb, bgRgb, 0.3));
     }
 
     return Object.keys(vars).length > 0 ? vars : undefined;

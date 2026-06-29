@@ -139,7 +139,7 @@ export default {
                         ([key, value]) => [key, `hsl(${value})`],
                     ),
                 ),
-                special: `hsl(${colorPalette.special})`,
+                special: "hsl(var(--special))",
                 "one-dark-background": "rgb(40, 44, 52)",
                 "one-light-background": "rgb(250, 250, 250)",
             },

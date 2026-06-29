@@ -92,6 +92,7 @@ export const defaultTheme: Theme = {
             "sidebar-ring": colorPalette.gray[400],
             "input-border": colorPalette.gray[300],
             helper: colorPalette.gray[400],
+            special: colorPalette.special,
             radius: "0.5rem",
         },
         dark: {
@@ -127,6 +128,7 @@ export const defaultTheme: Theme = {
             "sidebar-ring": colorPalette.gray[300],
             "input-border": colorPalette.gray[700],
             helper: colorPalette.gray[500],
+            special: colorPalette.special,
             radius: "0.5rem",
         },
     },
