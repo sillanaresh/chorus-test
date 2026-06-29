@@ -189,14 +189,42 @@ function readMobileThemeHex(varName: string, fallback: string): string {
     return (triplet && hslTripletToHex(triplet)) || fallback;
 }
 
-// Tappable starter prompts shown on an empty new chat. They prefill the
-// composer (editable) rather than sending immediately.
-const MOBILE_SUGGESTED_PROMPTS = [
+// Pool of tappable starter prompts shown on an empty new chat. They prefill
+// the composer (editable) rather than sending immediately. A fresh random
+// handful is shown each new chat to keep things lively.
+const MOBILE_SUGGESTED_PROMPT_POOL = [
     "Explain a tricky concept in simple terms",
     "Draft a quick email for me",
     "Brainstorm ideas for a project",
     "Summarize a long piece of text",
+    "Teach me something surprising today",
+    "Plan a cozy weekend for me",
+    "Roast my to-do list (gently)",
+    "Turn my rough notes into a clear plan",
+    "Give me a 30-second pep talk",
+    "Help me name something clever",
+    "Settle a debate with cold logic",
+    "Invent a tiny story in 3 lines",
 ] as const;
+
+function pickSuggestedPrompts(seed: string, count = 4): string[] {
+    const pool = [...MOBILE_SUGGESTED_PROMPT_POOL];
+    // Lightweight seeded shuffle so each chat gets a stable, varied set.
+    let h = 0;
+    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+    for (let i = pool.length - 1; i > 0; i--) {
+        h = (h * 1103515245 + 12345) & 0x7fffffff;
+        const j = h % (i + 1);
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, count);
+}
+
+// Marker set on an assistant message whose stream died because iOS suspended
+// the app in the background. On return we auto-resume these once.
+const BACKGROUND_INTERRUPT_MARKER =
+    "The response was interrupted while Chorus was in the background.";
+const autoResumedMessageIds = new Set<string>();
 
 function isOpenRouterModel(modelConfig: ModelConfig | undefined | null) {
     if (!modelConfig) return false;
@@ -2352,6 +2380,23 @@ function MobileAssistantMessage({
         restartToolsMessage,
     ]);
 
+    // If this answer was cut off because the app was backgrounded, resume it
+    // automatically (once) when the chat is back in view.
+    useEffect(() => {
+        if (message.errorMessage !== BACKGROUND_INTERRUPT_MARKER) return;
+        if (message.state === "streaming" || isRetrying || !modelConfig) return;
+        if (autoResumedMessageIds.has(message.id)) return;
+        autoResumedMessageIds.add(message.id);
+        retryResponse();
+    }, [
+        message.errorMessage,
+        message.state,
+        message.id,
+        isRetrying,
+        modelConfig,
+        retryResponse,
+    ]);
+
     return (
         <article className="w-full pt-3">
             <div
@@ -2658,6 +2703,11 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     }, []);
 
     // Prefill the composer with a starter prompt (editable, not auto-sent).
+    const suggestedPrompts = useMemo(
+        () => pickSuggestedPrompts(chatId ?? ""),
+        [chatId],
+    );
+
     const applySuggestedPrompt = useCallback(
         (text: string) => {
             if (!chatId) return;
@@ -2788,8 +2838,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
                                 await stopMessage.mutateAsync({
                                     chatId,
                                     messageId,
-                                    errorMessage:
-                                        "The response was interrupted while Chorus was in the background.",
+                                    errorMessage: BACKGROUND_INTERRUPT_MARKER,
                                 });
                             },
                         ),
@@ -2953,7 +3002,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
                         </p>
                         {suggestedPromptsEnabled && (
                             <div className="mt-5 flex w-full max-w-sm flex-col gap-2">
-                                {MOBILE_SUGGESTED_PROMPTS.map((prompt) => (
+                                {suggestedPrompts.map((prompt) => (
                                     <button
                                         key={prompt}
                                         type="button"
