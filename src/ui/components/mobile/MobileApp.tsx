@@ -224,7 +224,56 @@ function pickSuggestedPrompts(seed: string, count = 4): string[] {
 // the app in the background. On return we auto-resume these once.
 const BACKGROUND_INTERRUPT_MARKER =
     "The response was interrupted while Chorus was in the background.";
-const autoResumedMessageIds = new Set<string>();
+
+// Keeps the app (and the in-flight streaming fetch) alive while an answer is
+// generating, even if the user backgrounds the app, by holding a silent audio
+// session. Paired with UIBackgroundModes "audio" in the iOS Info.plist. Best
+// effort: if the OS suspends anyway, the existing interrupt handling applies.
+const streamKeepAlive = (() => {
+    let ctx: AudioContext | undefined;
+    let osc: OscillatorNode | undefined;
+    let running = false;
+
+    const ensureCtx = (): AudioContext | undefined => {
+        if (typeof AudioContext === "undefined") return undefined;
+        if (!ctx) ctx = new AudioContext();
+        return ctx;
+    };
+
+    return {
+        // Call from a user gesture so the audio session may start.
+        prime() {
+            const c = ensureCtx();
+            if (c && c.state === "suspended") void c.resume();
+        },
+        start() {
+            if (running) return;
+            const c = ensureCtx();
+            if (!c) return;
+            void c.resume();
+            const oscillator = c.createOscillator();
+            const gain = c.createGain();
+            gain.gain.value = 0.0001; // inaudible but non-zero
+            oscillator.connect(gain).connect(c.destination);
+            oscillator.start();
+            osc = oscillator;
+            running = true;
+        },
+        stop() {
+            if (!running) return;
+            running = false;
+            if (osc) {
+                try {
+                    osc.stop();
+                    osc.disconnect();
+                } catch {
+                    // oscillator already stopped
+                }
+                osc = undefined;
+            }
+        },
+    };
+})();
 
 function isOpenRouterModel(modelConfig: ModelConfig | undefined | null) {
     if (!modelConfig) return false;
@@ -2380,23 +2429,6 @@ function MobileAssistantMessage({
         restartToolsMessage,
     ]);
 
-    // If this answer was cut off because the app was backgrounded, resume it
-    // automatically (once) when the chat is back in view.
-    useEffect(() => {
-        if (message.errorMessage !== BACKGROUND_INTERRUPT_MARKER) return;
-        if (message.state === "streaming" || isRetrying || !modelConfig) return;
-        if (autoResumedMessageIds.has(message.id)) return;
-        autoResumedMessageIds.add(message.id);
-        retryResponse();
-    }, [
-        message.errorMessage,
-        message.state,
-        message.id,
-        isRetrying,
-        modelConfig,
-        retryResponse,
-    ]);
-
     return (
         <article className="w-full pt-3">
             <div
@@ -2764,6 +2796,24 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
         ).filter((message) => message.state === "streaming");
     }, [messageSetsQuery.data]);
 
+    // Hold a silent audio session while an answer is streaming so iOS keeps the
+    // app (and the fetch) alive if the user backgrounds it mid-generation.
+    const hasStreamingMessage = useMemo(
+        () =>
+            mobileAssistantMessages(messageSetsQuery.data ?? []).some(
+                (message) => message.state === "streaming",
+            ),
+        [messageSetsQuery.data],
+    );
+    useEffect(() => {
+        if (hasStreamingMessage) {
+            streamKeepAlive.start();
+        } else {
+            streamKeepAlive.stop();
+        }
+        return () => streamKeepAlive.stop();
+    }, [hasStreamingMessage]);
+
     useEffect(() => {
         if (!chatId || (messageSetsQuery.data?.length ?? 0) === 0) return;
         const idleTimer = window.setTimeout(
@@ -2979,7 +3029,10 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     return (
         <div
             className="mobile-app-shell flex h-full flex-col bg-background"
-            onTouchStart={chatListSwipe.onTouchStart}
+            onTouchStart={(event) => {
+                streamKeepAlive.prime();
+                chatListSwipe.onTouchStart(event);
+            }}
             onTouchMove={chatListSwipe.onTouchMove}
             onTouchEnd={chatListSwipe.onTouchEnd}
         >
