@@ -2197,9 +2197,6 @@ function MobileHeader({
 
     // Only offer share once the conversation actually has content.
     const canShare = Boolean(chatId && chat && !chat.isNewChat);
-    // A dot on the menu button when a toggle is on, so its state is visible
-    // without opening the menu.
-    const hasActiveToggle = mobileWebSearch.enabled || strongMode;
 
     const handleShare = () => {
         if (!chatId) return;
@@ -2247,9 +2244,6 @@ function MobileHeader({
                         aria-expanded={menuOpen}
                     >
                         <EllipsisVerticalIcon className="size-5" />
-                        {hasActiveToggle && !menuOpen && (
-                            <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-accent-800 dark:bg-accent-25" />
-                        )}
                     </button>
                     {menuOpen &&
                         createPortal(
@@ -2710,12 +2704,11 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
     } | null>(null);
     const [isLoadSlow, setIsLoadSlow] = useState(false);
 
-    // Swipe from the left edge to the right to reveal the chat list, the
-    // standard iOS drawer gesture.
-    // Open the chat list on a left-to-right swipe that can start anywhere on
-    // the screen (like ChatGPT / Claude), not just from the very left edge.
+    // Swipe left-to-right (anywhere, like ChatGPT / Claude) returns to the
+    // home chat list -- the same branded screen the header's menu button opens,
+    // so both gestures land on one consistent place.
     const chatListSwipe = useEdgeSwipe({
-        onSwipeRight: onOpenChats,
+        onSwipeRight: () => navigate("/"),
         edgeWidth: Number.POSITIVE_INFINITY,
         threshold: 64,
     });
