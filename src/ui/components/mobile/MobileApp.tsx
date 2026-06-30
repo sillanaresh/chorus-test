@@ -113,7 +113,7 @@ function MobileSettingsGroup({
 }) {
     const [open, setOpen] = useState(defaultOpen);
     return (
-        <div className="overflow-hidden rounded-xl bg-muted/50">
+        <div className="shrink-0 overflow-hidden rounded-xl bg-muted/50">
             <button
                 type="button"
                 className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left active:bg-foreground/5"
@@ -2251,13 +2251,19 @@ function MobileHeader({
                             <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-accent-800 dark:bg-accent-25" />
                         )}
                     </button>
-                    {menuOpen && (
-                        <>
-                            <div
-                                className="fixed inset-0 z-40"
-                                onClick={() => setMenuOpen(false)}
-                            />
-                            <div className="absolute right-0 top-12 z-50 w-60 overflow-hidden rounded-xl border bg-background p-1 shadow-lg">
+                    {menuOpen &&
+                        createPortal(
+                            <>
+                                <div
+                                    className="fixed inset-0 z-[60]"
+                                    onClick={() => setMenuOpen(false)}
+                                />
+                                <div
+                                    className="fixed right-3 z-[61] w-60 overflow-hidden rounded-xl border bg-background p-1 shadow-lg"
+                                    style={{
+                                        top: "calc(var(--mobile-safe-area-top, env(safe-area-inset-top, 0px)) + 3.75rem)",
+                                    }}
+                                >
                                 <button
                                     type="button"
                                     className={menuRow}
@@ -2325,9 +2331,10 @@ function MobileHeader({
                                         </span>
                                     </button>
                                 )}
-                            </div>
-                        </>
-                    )}
+                                </div>
+                            </>,
+                            document.body,
+                        )}
                 </div>
             </div>
         </header>
