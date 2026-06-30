@@ -2577,12 +2577,12 @@ function MobileUserMessage({ message }: { message: Message }) {
                     <textarea
                         value={draft}
                         onChange={(event) => setDraft(event.target.value)}
-                        className="min-h-24 w-[min(18rem,72vw)] resize-none border-0 bg-transparent p-0 text-[1rem] leading-6 text-highlight-foreground outline-none ring-0"
+                        className="min-h-24 w-[min(18rem,72vw)] resize-none border-0 bg-transparent p-0 text-base leading-6 text-highlight-foreground outline-none ring-0"
                         autoFocus
                         aria-label="Edit message"
                     />
                 ) : (
-                    <div className="whitespace-pre-wrap break-words text-[1rem] leading-6">
+                    <div className="whitespace-pre-wrap break-words text-base leading-6">
                         {message.text}
                     </div>
                 )}
@@ -3078,10 +3078,8 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
             >
                 {messageSets.length === 0 ? (
                     <div className="flex h-full min-h-[45dvh] flex-col items-center justify-center px-6 text-center">
-                        <p className="text-lg font-semibold leading-7 text-foreground">
-                            {greeting}
-                        </p>
-                        <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                        <p className={mobileType.screenTitle}>{greeting}</p>
+                        <p className={`mt-1 ${mobileType.caption}`}>
                             Send a message to get started.
                         </p>
                         {suggestedPromptsEnabled && (
