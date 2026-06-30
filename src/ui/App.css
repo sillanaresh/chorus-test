@@ -296,34 +296,31 @@ body.chorus-mobile-root {
     );
 }
 
+/* The settings panel is a normal flex column inside a fixed frame. The frame's
+   bottom rises with the keyboard, so the header, scroll area, and footer always
+   fit and the scroll area flexes to fill. This avoids the stale fixed-position
+   math that broke scrolling when a group was expanded. */
 .mobile-settings-panel {
     position: fixed;
-    inset: 0;
+    top: var(--mobile-visual-offset-top, 0px);
+    right: 0;
+    bottom: var(--mobile-keyboard-inset, 0px);
+    left: 0;
+    display: flex;
+    flex-direction: column;
     min-height: 0;
 }
 
 .mobile-settings-header {
-    position: fixed;
-    top: var(--mobile-visual-offset-top, 0px);
-    right: 0;
-    left: 0;
+    flex: 0 0 auto;
     z-index: 30;
     background: hsl(var(--background));
 }
 
 .mobile-settings-scroll {
-    position: fixed;
-    top: calc(
-        var(--mobile-visual-offset-top, 0px) +
-            var(--mobile-settings-header-height, 76px)
-    );
-    right: 0;
-    bottom: calc(
-        var(--mobile-keyboard-inset, 0px) +
-            var(--mobile-settings-footer-height, 68px)
-    );
-    left: 0;
+    flex: 1 1 auto;
     min-height: 0;
+    overflow-y: auto;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     scroll-padding-top: 1rem;
@@ -331,10 +328,7 @@ body.chorus-mobile-root {
 }
 
 .mobile-settings-footer {
-    position: fixed;
-    right: 0;
-    bottom: var(--mobile-keyboard-inset, 0px);
-    left: 0;
+    flex: 0 0 auto;
     z-index: 30;
     padding-bottom: var(
         --mobile-composer-bottom-padding,
