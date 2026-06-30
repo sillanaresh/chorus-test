@@ -3093,7 +3093,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
             >
                 {messageSets.length === 0 ? (
                     <div className="flex h-full min-h-[45dvh] flex-col items-center justify-center px-6 text-center">
-                        <p className={mobileType.screenTitle}>{greeting}</p>
+                        <p className={mobileType.body}>{greeting}</p>
                         <p className={`mt-1 ${mobileType.caption}`}>
                             {subtitle}
                         </p>
@@ -3103,7 +3103,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
                                     <button
                                         key={prompt}
                                         type="button"
-                                        className="rounded-xl border bg-muted/40 px-4 py-3 text-left text-sm leading-5 text-foreground transition-transform active:scale-[0.98] active:bg-muted"
+                                        className="rounded-xl border bg-muted/40 px-4 py-3 text-left text-base leading-6 text-foreground transition-transform active:scale-[0.98] active:bg-muted"
                                         onClick={() =>
                                             applySuggestedPrompt(prompt)
                                         }
