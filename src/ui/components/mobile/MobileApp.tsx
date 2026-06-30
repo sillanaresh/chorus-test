@@ -2224,7 +2224,7 @@ function MobileHeader({
         "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm active:bg-muted disabled:opacity-50";
 
     return (
-        <header className="mobile-header mobile-safe-top border-b bg-background/95 backdrop-blur-xl">
+        <header className="mobile-header mobile-safe-top liquid-glass border-b">
             <div className="flex h-16 items-center gap-2 px-3">
                 <button
                     type="button"
@@ -2253,7 +2253,7 @@ function MobileHeader({
                                     onClick={() => setMenuOpen(false)}
                                 />
                                 <div
-                                    className="fixed right-3 z-[61] w-60 overflow-hidden rounded-xl border bg-background p-1 shadow-lg"
+                                    className="liquid-glass fixed right-3 z-[61] w-60 overflow-hidden rounded-xl border p-1 shadow-lg"
                                     style={{
                                         top: "calc(var(--mobile-safe-area-top, env(safe-area-inset-top, 0px)) + 3.75rem)",
                                     }}
