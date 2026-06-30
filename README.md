@@ -21,12 +21,13 @@ It is built for people who want one clean place to use the best models without j
 ## What you can do
 
 - **Chat with top models** through OpenRouter. Set a fast **Base** model and a more capable **Strong** model, and flip between them in any chat with one tap.
+- **Start fast.** The app opens straight into a new chat. A new chat can show a few example prompts to get you going, and you can turn these off in settings.
 - **Speak instead of type.** Tap the mic in the composer, talk, and your words appear in the box. Transcription uses OpenAI and is tuned for accuracy, including accented English.
 - **A memory that actually remembers you.** The app quietly learns durable facts about you, your projects, your preferences and your stack, then brings the relevant ones into new chats. You can say "remember that…" to save something on purpose, and you can view or delete every memory.
 - **Search the web** when you want fresh answers, with a simple per-app toggle.
-- **Stay organized.** Pin important chats, search your history, and export any conversation to JSON or Markdown.
-- **Move fast.** Swipe left to right anywhere to open your chat list, and reach settings grouped into clean, tappable categories.
-- **Make it yours.** Add a personal system prompt, and pick a light, dark, or system theme.
+- **Stay organized.** Pin important chats, search your history, and share or export any conversation. Sharing uses the normal iPhone share sheet, and export can save JSON or Markdown.
+- **Move fast.** Swipe left to right anywhere to open your chat list, jump back to the latest reply with one tap, and reach settings grouped into clean, tappable categories.
+- **Make it yours.** Add a personal system prompt, pick a light, dark, or system theme, and set your own background, text, and reply box colors.
 - **Private by default.** Your chats and memories live in a local database on your device. Your keys are yours.
 
 ## How it works
@@ -96,7 +97,11 @@ Instead of the desktop model picker, the iPhone uses two slots, **Base** and **S
 ## Other features
 
 - **Pin, export, and search** for conversations, in `ChatAPI` and `ExportAPI`.
-- **Edge swipe** to open the chat list, and **collapsible settings** categories, in `MobileApp.tsx`.
+- **Share a conversation** from the chat header or the chat actions sheet, using the iPhone share sheet (`navigator.share`), in `MobileApp.tsx` and `ExportAPI`.
+- **Custom colors** for the background, text, and reply box, applied as theme variables scoped to the mobile app, in `src/ui/lib/mobileColorPresets.ts`.
+- **Suggested prompts** on a new chat, with a settings toggle, in `MobileApp.tsx`.
+- **Edge swipe** to open the chat list, a **jump to latest** button, and **collapsible settings** categories, in `MobileApp.tsx`.
+- **Keep generating in the background.** While a reply streams, the app holds a silent audio session so iOS keeps it running if you leave, so the answer can finish. This is a workaround. A native version that uses `beginBackgroundTask` is written and saved as the git tag `native-bg-wip`, but it is not merged yet.
 - **Production builds** strip debug logging for a quieter, slightly faster runtime.
 
 ---
