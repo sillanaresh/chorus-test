@@ -391,7 +391,7 @@ const MobileChatRow = memo(function MobileChatRow({
         >
             <button
                 type="button"
-                className="flex min-h-[3.75rem] min-w-0 flex-1 items-center gap-3 rounded-md px-3 text-left active:bg-muted"
+                className="flex min-h-[3.75rem] min-w-0 flex-1 items-center gap-3 rounded-md px-3 text-left transition-transform active:scale-[0.99] active:bg-muted"
                 onClick={onOpen}
                 aria-current={active ? "page" : undefined}
             >
@@ -2768,6 +2768,21 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
         return "Winding down?";
     }, []);
 
+    const subtitle = useMemo(() => {
+        const lines = [
+            "Send a message to get started.",
+            "What's on your mind?",
+            "Ask me anything.",
+            "Ready when you are.",
+            "Let's figure something out.",
+        ];
+        const seed = chatId ?? "";
+        let h = 0;
+        for (let i = 0; i < seed.length; i++)
+            h = (h * 31 + seed.charCodeAt(i)) | 0;
+        return lines[Math.abs(h) % lines.length];
+    }, [chatId]);
+
     const applySuggestedPrompt = useCallback(
         (text: string) => {
             if (!chatId) return;
@@ -3080,7 +3095,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
                     <div className="flex h-full min-h-[45dvh] flex-col items-center justify-center px-6 text-center">
                         <p className={mobileType.screenTitle}>{greeting}</p>
                         <p className={`mt-1 ${mobileType.caption}`}>
-                            Send a message to get started.
+                            {subtitle}
                         </p>
                         {suggestedPromptsEnabled && (
                             <div className="mt-5 flex w-full max-w-sm flex-col gap-2">
@@ -3088,7 +3103,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
                                     <button
                                         key={prompt}
                                         type="button"
-                                        className="rounded-xl border bg-muted/40 px-4 py-3 text-left text-sm leading-5 text-foreground active:bg-muted"
+                                        className="rounded-xl border bg-muted/40 px-4 py-3 text-left text-sm leading-5 text-foreground transition-transform active:scale-[0.98] active:bg-muted"
                                         onClick={() =>
                                             applySuggestedPrompt(prompt)
                                         }
