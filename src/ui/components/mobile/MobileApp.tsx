@@ -144,7 +144,6 @@ const mobileHeaderModelControl =
 const mobileFab =
     "fixed bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] right-5 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-background shadow-md active:scale-95";
 
-const mobileWebOn = "border-accent-800 bg-accent-800 !text-accent-25";
 const MOBILE_SYSTEM_PROMPT_WORD_LIMIT = 500;
 
 function normalizedModelName(model: ModelConfig) {
@@ -1036,7 +1035,6 @@ function MobileChatModelControl({ chatId }: { chatId?: string }) {
     const preferences = AppMetadataAPI.useMobileModelPreferences();
     const chatSlots = AppMetadataAPI.useMobileChatModelSlots(chatId);
     const strongMode = AppMetadataAPI.useMobileChatStrongMode(chatId);
-    const setStrongMode = AppMetadataAPI.useSetMobileChatStrongMode();
     const setChatSlots = AppMetadataAPI.useSetMobileChatModelSlots();
     const setChatSlotModel = AppMetadataAPI.useSetMobileChatSlotModel();
     const savedChatModel = ModelConfigChatAPI.useSavedModelConfigChat(chatId);
@@ -1103,22 +1101,6 @@ function MobileChatModelControl({ chatId }: { chatId?: string }) {
         });
     }, [activeModel, chatId, savedChatModel.data, updateSavedChatModel]);
 
-    const toggleMode = async () => {
-        if (!chatId || !baseModel || !strongModel) return;
-        const nextStrongMode = !strongMode;
-        const nextModel = nextStrongMode ? strongModel : baseModel;
-        await Promise.all([
-            setStrongMode.mutateAsync({
-                chatId,
-                enabled: nextStrongMode,
-            }),
-            updateSavedChatModel.mutateAsync({
-                chatId,
-                modelIds: [nextModel.id],
-            }),
-        ]);
-    };
-
     return (
         <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
@@ -1138,23 +1120,6 @@ function MobileChatModelControl({ chatId }: { chatId?: string }) {
                     {activeModel?.displayName ?? "Choose model"}
                 </span>
                 <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
-            </button>
-            <button
-                type="button"
-                role="switch"
-                aria-checked={strongMode}
-                className={`${mobileHeaderAction} ${
-                    strongMode ? mobileWebOn : ""
-                }`}
-                onClick={() => void toggleMode()}
-                disabled={!chatId || !activeModel || setStrongMode.isPending}
-                aria-label={
-                    strongMode
-                        ? "Use base model"
-                        : "Think harder with strong model"
-                }
-            >
-                <SparklesIcon className="size-5" />
             </button>
             {isPickerOpen && (
                 <MobileModelPickerSheet
@@ -2225,10 +2190,16 @@ function MobileHeader({
 }) {
     const { chatId } = useParams();
     const mobileWebSearch = useMobileWebSearchToggle(chatId);
+    const strongMode = AppMetadataAPI.useMobileChatStrongMode(chatId);
+    const setStrongMode = AppMetadataAPI.useSetMobileChatStrongMode();
     const [isSharing, setIsSharing] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
 
     // Only offer share once the conversation actually has content.
     const canShare = Boolean(chatId && chat && !chat.isNewChat);
+    // A dot on the menu button when a toggle is on, so its state is visible
+    // without opening the menu.
+    const hasActiveToggle = mobileWebSearch.enabled || strongMode;
 
     const handleShare = () => {
         if (!chatId) return;
@@ -2252,6 +2223,9 @@ function MobileHeader({
             .finally(() => setIsSharing(false));
     };
 
+    const menuRow =
+        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm active:bg-muted disabled:opacity-50";
+
     return (
         <header className="mobile-header mobile-safe-top border-b bg-background/95 backdrop-blur-xl">
             <div className="flex h-16 items-center gap-2 px-3">
@@ -2259,56 +2233,101 @@ function MobileHeader({
                     type="button"
                     className={mobileIconButton}
                     onClick={onBack ?? onOpenChats}
-                    aria-label={onBack ? "Back to chats" : "Open chats"}
+                    aria-label="Open chats"
                 >
-                    {onBack ? (
-                        <ArrowLeftIcon className="size-5" />
-                    ) : (
-                        <MenuIcon className="size-5" />
-                    )}
+                    <MenuIcon className="size-5" />
                 </button>
                 <MobileChatModelControl chatId={chatId} />
-                <div className="flex shrink-0 items-center gap-2">
-                    {canShare && (
-                        <button
-                            type="button"
-                            className={mobileHeaderAction}
-                            onClick={handleShare}
-                            disabled={isSharing}
-                            aria-label="Share conversation"
-                        >
-                            <Share2Icon className="size-5" />
-                        </button>
+                <div className="relative shrink-0">
+                    <button
+                        type="button"
+                        className={`${mobileHeaderAction} ${menuOpen ? "bg-muted" : ""}`}
+                        onClick={() => setMenuOpen((open) => !open)}
+                        aria-label="More options"
+                        aria-expanded={menuOpen}
+                    >
+                        <EllipsisVerticalIcon className="size-5" />
+                        {hasActiveToggle && !menuOpen && (
+                            <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-accent-800 dark:bg-accent-25" />
+                        )}
+                    </button>
+                    {menuOpen && (
+                        <>
+                            <div
+                                className="fixed inset-0 z-40"
+                                onClick={() => setMenuOpen(false)}
+                            />
+                            <div className="absolute right-0 top-12 z-50 w-60 overflow-hidden rounded-xl border bg-background p-1 shadow-lg">
+                                <button
+                                    type="button"
+                                    className={menuRow}
+                                    onClick={() => {
+                                        setMenuOpen(false);
+                                        onNewChat();
+                                    }}
+                                >
+                                    <PlusIcon className="size-5 shrink-0 text-muted-foreground" />
+                                    <span className="flex-1">New chat</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={mobileWebSearch.enabled}
+                                    className={menuRow}
+                                    disabled={mobileWebSearch.isPending}
+                                    onClick={() =>
+                                        void mobileWebSearch.setEnabled(
+                                            !mobileWebSearch.enabled,
+                                        )
+                                    }
+                                >
+                                    <GlobeIcon className="size-5 shrink-0 text-muted-foreground" />
+                                    <span className="flex-1">Search the web</span>
+                                    {mobileWebSearch.enabled && (
+                                        <CheckIcon className="size-4 shrink-0 text-accent-800 dark:text-accent-25" />
+                                    )}
+                                </button>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={strongMode}
+                                    className={menuRow}
+                                    disabled={!chatId || setStrongMode.isPending}
+                                    onClick={() => {
+                                        if (!chatId) return;
+                                        setStrongMode.mutate({
+                                            chatId,
+                                            enabled: !strongMode,
+                                        });
+                                    }}
+                                >
+                                    <SparklesIcon className="size-5 shrink-0 text-muted-foreground" />
+                                    <span className="flex-1">
+                                        Think harder
+                                    </span>
+                                    {strongMode && (
+                                        <CheckIcon className="size-4 shrink-0 text-accent-800 dark:text-accent-25" />
+                                    )}
+                                </button>
+                                {canShare && (
+                                    <button
+                                        type="button"
+                                        className={menuRow}
+                                        disabled={isSharing}
+                                        onClick={() => {
+                                            setMenuOpen(false);
+                                            handleShare();
+                                        }}
+                                    >
+                                        <Share2Icon className="size-5 shrink-0 text-muted-foreground" />
+                                        <span className="flex-1">
+                                            Share conversation
+                                        </span>
+                                    </button>
+                                )}
+                            </div>
+                        </>
                     )}
-                    <button
-                        type="button"
-                        role="switch"
-                        aria-checked={mobileWebSearch.enabled}
-                        className={`${mobileHeaderAction} ${
-                            mobileWebSearch.enabled ? mobileWebOn : ""
-                        }`}
-                        onClick={() =>
-                            void mobileWebSearch.setEnabled(
-                                !mobileWebSearch.enabled,
-                            )
-                        }
-                        disabled={mobileWebSearch.isPending}
-                        aria-label={
-                            mobileWebSearch.enabled
-                                ? "Disable web search for this chat"
-                                : "Enable web search for this chat"
-                        }
-                    >
-                        <GlobeIcon className="size-5" />
-                    </button>
-                    <button
-                        type="button"
-                        className={mobileHeaderAction}
-                        onClick={onNewChat}
-                        aria-label="New chat"
-                    >
-                        <PlusIcon className="size-5" />
-                    </button>
                 </div>
             </div>
         </header>
@@ -2740,6 +2759,15 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
         [chatId],
     );
 
+    const greeting = useMemo(() => {
+        const hour = new Date().getHours();
+        if (hour < 5) return "Working late?";
+        if (hour < 12) return "Good morning.";
+        if (hour < 17) return "Good afternoon.";
+        if (hour < 22) return "Good evening.";
+        return "Winding down?";
+    }, []);
+
     const applySuggestedPrompt = useCallback(
         (text: string) => {
             if (!chatId) return;
@@ -3050,7 +3078,10 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
             >
                 {messageSets.length === 0 ? (
                     <div className="flex h-full min-h-[45dvh] flex-col items-center justify-center px-6 text-center">
-                        <p className="text-base leading-6 text-muted-foreground">
+                        <p className="text-lg font-semibold leading-7 text-foreground">
+                            {greeting}
+                        </p>
+                        <p className="mt-1 text-sm leading-5 text-muted-foreground">
                             Send a message to get started.
                         </p>
                         {suggestedPromptsEnabled && (
