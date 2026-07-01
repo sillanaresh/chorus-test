@@ -153,4 +153,8 @@ Tunables (`--glass-tint`, `--glass-blur`, `--glass-saturate`, `--glass-brightnes
 
 Key gotcha: `backdrop-filter` only *reads* as glass when content scrolls **underneath** the surface. `.mobile-chat-scroll` therefore spans the full height (top offset → keyboard) and uses header-/composer-sized padding, so messages slide under the translucent header and composer instead of being inset between them. If you ever re-inset the scroll area, the glass will look flat again.
 
+The list/content routes (Home, Memory, Privacy) apply the same idea a simpler way: the `<header>` lives *inside* the scrolling `<main>` as a `sticky top-0 z-30 liquid-glass` element with a negative horizontal margin (`-mx-*`) that cancels `<main>`'s padding so the bar goes edge-to-edge. Because it's a sticky child of the scroller, list content naturally slides under it with no JS height measurement. Don't move these headers back out to be flex siblings of `<main>` — sticky won't attach to the scroller and the glass goes flat again.
+
+Bottom sheets (chat actions, attachment menu, model picker, chat drawer) use `.liquid-glass-panel` for the sheet plus `.liquid-glass-scrim` for the dimmed backdrop. The Settings panel is intentionally left solid: its flex column with a keyboard-aware footer is delicate, and a sticky/overlay header there risks the scroll math.
+
 Fallbacks are built in: `@supports not (backdrop-filter)` → near-solid fills; `@media (prefers-reduced-transparency: reduce)` → solid, no blur.

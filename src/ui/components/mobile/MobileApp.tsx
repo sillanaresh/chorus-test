@@ -3190,8 +3190,9 @@ function MobileHome() {
     }
 
     return (
-        <div className="flex h-full flex-col bg-background mobile-safe-top">
-            <header className="shrink-0 border-b px-4 pb-3">
+        <div className="flex h-full flex-col bg-background">
+            <main className="relative min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+                <header className="sticky top-0 z-30 -mx-3 mb-1 mobile-safe-top liquid-glass border-b px-4 pb-3">
                 <div className="flex min-h-24 items-center justify-between">
                     <div className="flex min-w-0 items-center gap-3">
                         <img
@@ -3228,9 +3229,8 @@ function MobileHome() {
                     </div>
                 </div>
                 <MobileChatSearch value={query} onChange={setQuery} />
-            </header>
+                </header>
 
-            <main className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3">
                 {chatsQuery.isPending ? (
                     <div className="flex flex-col gap-2 px-3 py-2">
                         {[0, 1, 2, 3, 4].map((index) => (
@@ -3311,8 +3311,9 @@ function MobileMemoriesRoute() {
     }, [deferredQuery, memoriesQuery.data]);
 
     return (
-        <div className="flex h-full flex-col bg-background mobile-safe-top">
-            <header className="shrink-0 border-b px-4 pb-3">
+        <div className="flex h-full flex-col bg-background">
+            <main className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+                <header className="sticky top-0 z-30 -mx-4 mb-1 mobile-safe-top liquid-glass border-b px-4 pb-3">
                 <div className="flex min-h-16 items-center gap-3">
                     <button
                         type="button"
@@ -3342,9 +3343,8 @@ function MobileMemoriesRoute() {
                     onChange={setQuery}
                     placeholder="Search memories"
                 />
-            </header>
+                </header>
 
-            <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                 {memoriesQuery.isPending ? (
                     <div className="flex flex-col gap-2">
                         {[0, 1, 2].map((index) => (
@@ -3417,19 +3417,19 @@ function MobilePrivacyRoute() {
     const navigate = useNavigate();
 
     return (
-        <div className="flex h-full flex-col bg-background mobile-safe-top">
-            <header className="flex min-h-16 shrink-0 items-center gap-3 border-b px-4">
-                <button
-                    type="button"
-                    className={mobileIconButton}
-                    onClick={() => navigate(-1)}
-                    aria-label="Back"
-                >
-                    <ArrowLeftIcon className="size-5" />
-                </button>
-                <h1 className={mobileType.screenTitle}>Privacy and data</h1>
-            </header>
-            <main className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        <div className="flex h-full flex-col bg-background">
+            <main className="relative min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+                <header className="sticky top-0 z-30 -mx-5 mb-4 mobile-safe-top liquid-glass flex min-h-16 items-center gap-3 border-b px-4">
+                    <button
+                        type="button"
+                        className={mobileIconButton}
+                        onClick={() => navigate(-1)}
+                        aria-label="Back"
+                    >
+                        <ArrowLeftIcon className="size-5" />
+                    </button>
+                    <h1 className={mobileType.screenTitle}>Privacy and data</h1>
+                </header>
                 <div className="mx-auto flex max-w-2xl flex-col gap-6">
                     <section>
                         <h2 className={mobileType.label}>

@@ -1051,14 +1051,14 @@ export function ChatInput({
                 {isMobileAttachmentMenuOpen &&
                     createPortal(
                         <div
-                            className="fixed inset-0 z-[90] flex items-end bg-black/35"
+                            className="liquid-glass-scrim fixed inset-0 z-[90] flex items-end"
                             role="dialog"
                             aria-modal="true"
                             aria-label="Add attachment"
                             onClick={() => setIsMobileAttachmentMenuOpen(false)}
                         >
                             <div
-                                className="w-full rounded-t-xl bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-lg"
+                                className="liquid-glass-panel w-full rounded-t-xl px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-lg"
                                 onClick={(event) => event.stopPropagation()}
                             >
                                 <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/30" />
