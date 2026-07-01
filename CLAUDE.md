@@ -140,3 +140,17 @@ When we run into issues with the requests we're sending to model providers (e.g.
 Whenever you discover something that you wish you'd known earlier -- and seems likely to be helpful to future developers as well -- you can add it to the scratchpad section below. Feel free to edit the scratchpad section, but don't change the rest of this doc.
 
 ### Scratchpad
+
+#### Liquid-glass material (mobile)
+
+The mobile UI uses a shared glass material defined in `src/ui/App.css`:
+
+- `.liquid-glass` — floating chrome (header, composer, more-menu, floating buttons).
+- `.liquid-glass-panel` — larger, more opaque surfaces (drawers, full-screen sheets) where list/form legibility matters.
+- `.liquid-glass-scrim` — the blurred dark wash behind bottom sheets.
+
+Tunables (`--glass-tint`, `--glass-blur`, `--glass-saturate`, `--glass-brightness`, `--glass-edge`, `--glass-sheen`) live on `:root` (with a `.dark` override), NOT on `.mobile-app`. This is deliberate: several glass surfaces render through `createPortal(..., document.body)` (the header more-menu, model picker, chat-actions sheet), which sit OUTSIDE the `.mobile-app` subtree, so vars scoped to `.mobile-app` would not reach them and the color would break.
+
+Key gotcha: `backdrop-filter` only *reads* as glass when content scrolls **underneath** the surface. `.mobile-chat-scroll` therefore spans the full height (top offset → keyboard) and uses header-/composer-sized padding, so messages slide under the translucent header and composer instead of being inset between them. If you ever re-inset the scroll area, the glass will look flat again.
+
+Fallbacks are built in: `@supports not (backdrop-filter)` → near-solid fills; `@media (prefers-reduced-transparency: reduce)` → solid, no blur.

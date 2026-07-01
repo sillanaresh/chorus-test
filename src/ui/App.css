@@ -225,16 +225,112 @@ body.chorus-mobile-root {
     min-height: 0;
 }
 
-/* Frosted "liquid glass" approximation for floating chrome (header, menus):
-   translucent fill + backdrop blur/saturation + a soft top edge highlight.
-   Best seen with content scrolling underneath. */
+/* Liquid-glass material for floating chrome and overlays.
+
+   It only *reads* as glass when content passes underneath it, so the chat
+   scroll area is deliberately allowed to run under the header and composer
+   (see .mobile-chat-scroll). Each surface layers four things: a translucent
+   tint (so the background color still reads through), a heavy backdrop blur
+   with a saturation/brightness lift for the "lensing" look, a faint diagonal
+   specular sheen baked into the background image (paints below content, so it
+   never dims text), and inset highlights that draw a bright top edge plus a
+   hairline border.
+
+   Tunables live on :root (not .mobile-app) so they also reach glass surfaces
+   rendered through portals into document.body — the header "more" menu, the
+   model picker, and the chat-actions sheet — which sit outside the mobile-app
+   subtree. Dark mode is toggled by a .dark class on <html>. */
+:root {
+    --glass-tint: 0.55;
+    --glass-blur: 24px;
+    --glass-saturate: 190%;
+    --glass-brightness: 1.06;
+    --glass-edge: 0.28; /* top specular highlight strength */
+    --glass-sheen: 0.14; /* diagonal light-sweep strength */
+}
+
+.dark {
+    --glass-tint: 0.5;
+    --glass-brightness: 1.12;
+    --glass-edge: 0.16;
+    --glass-sheen: 0.08;
+}
+
 .liquid-glass {
-    background-color: hsl(var(--background) / 0.62);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    backdrop-filter: blur(20px) saturate(180%);
+    background-color: hsl(var(--background) / var(--glass-tint));
+    background-image: linear-gradient(
+        130deg,
+        hsl(0 0% 100% / var(--glass-sheen)),
+        hsl(0 0% 100% / calc(var(--glass-sheen) * 0.2)) 30%,
+        transparent 60%
+    );
+    -webkit-backdrop-filter: blur(var(--glass-blur))
+        saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
+        brightness(var(--glass-brightness));
     box-shadow:
-        inset 0 1px 0 0 hsl(0 0% 100% / 0.22),
-        inset 0 0 0 1px hsl(var(--foreground) / 0.04);
+        inset 0 1px 0 0 hsl(0 0% 100% / var(--glass-edge)),
+        inset 0 0 0 1px hsl(var(--foreground) / 0.05),
+        inset 0 -1px 0 0 hsl(var(--foreground) / 0.04);
+}
+
+/* A more opaque variant for large panels (drawers, full-screen sheets) where
+   the surface carries lists or forms and legibility comes first, but we still
+   want depth from the blur. */
+.liquid-glass-panel {
+    background-color: hsl(var(--background) / 0.78);
+    background-image: linear-gradient(
+        130deg,
+        hsl(0 0% 100% / calc(var(--glass-sheen) * 0.7)),
+        transparent 55%
+    );
+    -webkit-backdrop-filter: blur(var(--glass-blur))
+        saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow:
+        inset 0 1px 0 0 hsl(0 0% 100% / var(--glass-edge)),
+        inset 0 0 0 1px hsl(var(--foreground) / 0.05);
+}
+
+/* Backdrop scrim behind bottom sheets: a soft dark wash plus a light blur so
+   the content behind melts away without going fully opaque. */
+.liquid-glass-scrim {
+    background-color: hsl(220 20% 6% / 0.32);
+    -webkit-backdrop-filter: blur(8px) saturate(120%);
+    backdrop-filter: blur(8px) saturate(120%);
+}
+
+/* No backdrop-filter support: fall back to near-solid fills so chrome and
+   overlays stay legible instead of showing raw content through a flat tint. */
+@supports not (
+    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+    .liquid-glass {
+        background-color: hsl(var(--background) / 0.95);
+    }
+    .liquid-glass-panel {
+        background-color: hsl(var(--background) / 0.97);
+    }
+    .liquid-glass-scrim {
+        background-color: hsl(220 20% 6% / 0.55);
+    }
+}
+
+/* Respect the OS "reduce transparency" accessibility setting: drop the blur
+   and translucency entirely for solid, high-contrast surfaces. */
+@media (prefers-reduced-transparency: reduce) {
+    .liquid-glass,
+    .liquid-glass-panel {
+        background-color: hsl(var(--background));
+        background-image: none;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+    .liquid-glass-scrim {
+        background-color: hsl(220 20% 6% / 0.6);
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
 }
 
 .mobile-boot-screen {
@@ -277,23 +373,24 @@ body.chorus-mobile-root {
     z-index: 30;
 }
 
+/* The scroll area spans the full height between the top offset and the
+   keyboard, running *under* the translucent header and composer. Header- and
+   composer-sized padding keep the first and last messages clear of the chrome
+   while still letting content slide beneath the glass as you scroll — that
+   pass-under is what makes the blur read as a real material. */
 .mobile-chat-scroll {
     position: fixed;
-    top: calc(
-        var(--mobile-visual-offset-top, 0px) + var(--mobile-header-height)
-    );
+    top: var(--mobile-visual-offset-top, 0px);
     right: 0;
-    bottom: calc(
-        var(--mobile-keyboard-inset, 0px) + var(--mobile-composer-height, 76px)
-    );
+    bottom: var(--mobile-keyboard-inset, 0px);
     left: 0;
     min-height: 0;
-    padding-top: 0.875rem;
-    padding-bottom: 1rem;
+    padding-top: calc(var(--mobile-header-height) + 0.875rem);
+    padding-bottom: calc(var(--mobile-composer-height, 76px) + 1rem);
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
-    scroll-padding-top: 0.875rem;
-    scroll-padding-bottom: 1rem;
+    scroll-padding-top: calc(var(--mobile-header-height) + 0.875rem);
+    scroll-padding-bottom: calc(var(--mobile-composer-height, 76px) + 1rem);
 }
 
 .mobile-chat-composer {

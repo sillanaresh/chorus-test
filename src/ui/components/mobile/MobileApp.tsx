@@ -483,14 +483,14 @@ function MobileChatActionsSheet({
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[80] flex items-end bg-black/35"
+            className="liquid-glass-scrim fixed inset-0 z-[80] flex items-end"
             role="dialog"
             aria-modal="true"
             aria-labelledby="mobile-chat-actions-title"
             onClick={onClose}
         >
             <div
-                className="w-full rounded-t-xl bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-lg"
+                className="liquid-glass-panel w-full rounded-t-xl px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-lg"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/30" />
@@ -1180,7 +1180,7 @@ function MobileModelPickerSheet({
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[70] bg-background"
+            className="liquid-glass-panel fixed inset-0 z-[70]"
             role="dialog"
             aria-modal="true"
             aria-labelledby="mobile-model-picker-title"
@@ -2084,7 +2084,7 @@ function MobileChatListSheet({
 
     return (
         <div
-            className={`fixed inset-0 z-40 bg-background transition-transform duration-300 ease-out will-change-transform ${
+            className={`liquid-glass-panel fixed inset-0 z-40 transition-transform duration-300 ease-out will-change-transform ${
                 entered ? "translate-x-0" : "-translate-x-full"
             }`}
             onTouchStart={handleSheetTouchStart}
@@ -3089,7 +3089,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
             <main
                 ref={scrollContainerRef}
                 onScroll={handleChatScroll}
-                className="mobile-chat-scroll flex-1 overflow-y-auto overscroll-contain px-4 pt-4"
+                className="mobile-chat-scroll flex-1 overflow-y-auto overscroll-contain px-4"
             >
                 {messageSets.length === 0 ? (
                     <div className="flex h-full min-h-[45dvh] flex-col items-center justify-center px-6 text-center">
@@ -3136,7 +3136,7 @@ function MobileChatRoute({ onOpenChats }: { onOpenChats: () => void }) {
                     <button
                         type="button"
                         aria-label="Scroll to latest"
-                        className="absolute -top-12 right-4 z-10 flex size-10 items-center justify-center rounded-full border bg-background text-foreground shadow-md active:bg-muted"
+                        className="liquid-glass absolute -top-12 right-4 z-10 flex size-10 items-center justify-center rounded-full border text-foreground shadow-md active:bg-muted"
                         onClick={() => {
                             scrollToLatestMessageSet();
                             setShowScrollToBottom(false);
